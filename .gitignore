@@ -1,0 +1,8 @@
+.vscode
+pipeline_stats.txt*
+.vagrant
+*cloudimg-console.log
+*.nextflow.log*
+.nextflow
+work
+test*

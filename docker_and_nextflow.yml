@@ -1,0 +1,163 @@
+# ansible file for installing docker and nextflow
+---
+- hosts: 127.0.0.1
+  connection: local
+  become: true
+
+  vars:
+    primary_user: biouser
+    sudoers:
+      - biouser
+
+  tasks:
+
+  # Install Docker
+    - name: Install dependencies of docker
+      apt:
+        update_cache: yes
+        pkg: '{{ item }}'
+        state: present
+      with_items:
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - software-properties-common
+    
+    - name: Add docker Apt signing key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+    
+    - name: Add docker repo
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable
+        state: present
+
+    - name: Install docker
+      apt:
+        update_cache: yes
+        pkg: '{{ item }}'
+        state: present
+      with_items:
+        - docker-ce
+
+  # Make a user (biouser) with sudo and docker permissions
+    - name: Make primary user
+      user:
+        name: '{{ primary_user }}'
+        password: '$6$DlwXvJxCkCa0g191$U9WN32K/huWJD3k3tuldIvwPWhkOtGO9nhMFKfb0OWqiF6nUI2DMwecwcM0NakHDuydTiB.Jyeh1XSNPuPzxj.'
+        shell: /bin/bash
+        state: present
+        force: yes
+        
+    - name: Expire primary userpassword
+      command: 'chage -d 0 {{ primary_user }}'
+
+    - name: update sshd config
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication.*no'
+        line: 'PasswordAuthentication yes'
+      notify: restart_sshd
+
+    - name: Make sure we have a 'wheel' group
+      group:
+        name: wheel
+        state: present
+
+    - name: Allow 'wheel' group to have passwordless sudo
+      lineinfile:
+        dest: /etc/sudoers
+        state: present
+        regexp: '^%wheel'
+        line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+        validate: visudo -cf %s
+
+    - name: Make sure we have a 'docker' group
+      group:
+        name: docker
+        state: present
+  
+    - name: Add sudoers users to wheel and docker group
+      user:
+        name: '{{ item }}'
+        groups:
+          - wheel
+          - docker
+        append: yes
+      with_items: '{{ sudoers }}'
+
+  # Install nextflow
+    - name: Install dependencies of nextflow
+      apt:
+        update_cache: yes
+        pkg: '{{ item }}'
+        state: present
+      with_items:
+        - default-jre-headless
+
+    - name: Download nextflow installer
+      get_url: 
+        url: https://get.nextflow.io
+        dest: '/usr/local/bin/nextflow'
+        mode: 0755
+
+    - name: Execute the nextflow installer
+      shell: '/usr/local/bin/nextflow'
+
+    - name: Delete .nextflow directory in case it already exists
+      file:
+        path: /usr/local/.nextflow 
+        state: absent
+    
+    - name: Move nextflow dependecies
+      command: "{{ item }}"
+      with_items:
+       - mv /root/.nextflow /usr/local/.nextflow
+       - chmod -R o+rw /usr/local/.nextflow
+
+  # add nextflow env variable to primary user .bashrc
+    - name: Load nextflow env variable NXF_HOME automatically in ~/.bashrc
+      lineinfile:
+        dest: '~{{ primary_user}}/.bashrc'
+        line: '{{ item }}'
+        create: yes
+        state: present
+      with_items:
+        - '# Nextflow functionality'
+        - 'export NXF_HOME="/usr/local/.nextflow"'
+    
+    - name: Install pip2 and pip3
+      apt:
+        update_cache: yes
+        pkg: '{{ item }}'
+        state: present
+      with_items:
+        - python3-pip
+        - python-pip
+    
+    - name: clone flowcraft
+      git:
+        repo: 'https://github.com/assemblerflow/flowcraft.git'
+        dest: '/root/flowcraft'
+
+    - name: install flowcraft
+      command: python3 setup.py install
+      args:
+        chdir: /root/flowcraft
+
+  # Install the docker image with assembly dependencies
+    - name: install the docker-py module in order to add ansible docker image functionality
+      pip:
+        name: docker-py
+
+    - name: pull the GHRU assembly docker image
+      docker_image:
+        name: bioinformant/ghru-assembly:latest
+  
+  handlers:
+  - name: restart_sshd
+    service:
+      name: sshd
+      state: restarted
+
