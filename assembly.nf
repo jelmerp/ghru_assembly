@@ -169,7 +169,8 @@ process determine_min_read_length {
   set pair_id, file(file_pair) from raw_fastqs_for_length_assessment
 
   output:
-  set pair_id, stdout into min_read_length 
+  set pair_id, stdout into min_read_length_for_trimming, min_read_length_for_assembly
+
 
   """
   gzip -cd ${file_pair[0]} | head -n 400000 | printf "%.0f" \$(awk 'NR%4==2{sum+=length(\$0)}END{print sum/(NR/4)/3}')
@@ -195,7 +196,7 @@ process qc_pre_trimming {
   """
 }
 
-min_read_length_and_raw_fastqs = min_read_length.join(raw_fastqs_for_trimming)
+min_read_length_and_raw_fastqs = min_read_length_for_trimming.join(raw_fastqs_for_trimming)
 
 // Trimming
 process trimming {
@@ -348,6 +349,8 @@ process merge_reads{
 
 }
 
+ min_read_length_and_raw_fastqs = min_read_length_for_assembly.join(merged_fastqs)
+
 // assemble reads
 process spades_assembly {
   memory '4 GB'
@@ -355,13 +358,22 @@ process spades_assembly {
   tag { pair_id }
 
   input:
-  set pair_id, file(file_triplet) from merged_fastqs
+  set pair_id, min_read_length, file(file_triplet) from min_read_length_and_raw_fastqs
+
 
   output:
   set pair_id, file("scaffolds.fasta") into scaffolds
 
+  script:
+  if (min_read_length.toInteger() < 27 ) {
+    kmers = '21,33,43,53'
+  } else {
+    kmers = '21,33,43,53,63,75'
+  }
+
   """
-  spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler  -o . --tmp-dir /tmp/${pair_id}_assembly -k 21,33,43,53,63,75 --threads 1 --memory 4
+  spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler  -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory 4
+
   """
 
 }
