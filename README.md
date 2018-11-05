@@ -9,11 +9,11 @@ nextflow run assembly.nf [options] -with-docker bioinformant/ghru-assembly:1.1 -
 To run the test sets either of the following commands will work
  - Using  local fastqs and no down sampling
     ```
-    nextflow run assembly.nf --input_dir test_input --output_dir test_output --fastq_pattern "*_{1,2}.fastq.gz" --adapter_file adapters.fas -with-docker bioinformant/ghru-assembly:1.1 -resume
+    nextflow run assembly.nf --input_dir test_input --output_dir test_output --fastq_pattern "*_{1,2}.fastq.gz" --adapter_file adapters.fas -with-docker bioinformant/ghru-assembly:1.2 -resume
     ```
  - Using accession numbers to fetch short reads and downsampling to a depth cutofff of 50
     ```
-    nextflow run assembly.nf --accession_number_file accessions.txt --output_dir test_output --fastq_pattern "*_{1,2}.fastq.gz" --adapter_file adapters.fas --depth_cutoff 50 -with-docker bioinformant/ghru-assembly:1.1 -resume
+    nextflow run assembly.nf --accession_number_file accessions.txt --output_dir test_output --fastq_pattern "*_{1,2}.fastq.gz" --adapter_file adapters.fas --depth_cutoff 50 -with-docker bioinformant/ghru-assembly:1.2 -resume
     ```
 
 The mandatory options that should be supplied are
@@ -27,6 +27,7 @@ Optional arguments include
   - `--depth_cutoff` argument. Downsample each sample to an approximate depth of the value supplied e.g 50 means downsample to 50x depth of coverage . If not specified no downsampling will occur
   - The minimum length of a scaffold to keep is specified using the `--minimum_scaffold_length` argument. Others will be filtered out. Default 500 
   - The minimum depth of coverage a scaffold must have in order to be kept is specified by the `--minimum_scaffold_depth` argument. Others will be filtered out. Default 3 
+  - Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr). An example of the format can be seen [here](qc_conditions.yml)
 
 ## Workflow process
 The workflow consists of the following steps
@@ -36,12 +37,14 @@ The workflow consists of the following steps
 3. Trim reads using trimmomatic (dynamic MIN_LEN based on 30% of the read length)
 4. QC reads using FastQC after trimming
 5. Correct reads using lighter
-6. Count number of reads and estomate genome size using Mash
-7. Downsample reads if the `--depth_cutoff` argument was specified
-8. Merge reads using Flash where the insert size is small
-9. Assemble reads using SPAdes
-10. Assess assembly quality using Quast
-11. Sumarise all assembly QCs using Quast
+6. Check for contamination using [confindr](https://lowandrew.github.io/ConFindr/)
+7. Count number of reads and estimate genome size using Mash
+8. Downsample reads if the `--depth_cutoff` argument was specified
+9. Merge reads using Flash where the insert size is small
+10. Assemble reads using SPAdes
+11. Assess assembly quality using Quast
+12. Sumarise all assembly QCs using Quast
+13. (Optional if [QuailFyr](https://gitlab.com/cgps/qualifyr) qc conditions YAML file is supplied). Filter assemblies into three directories: pass, warning and failure based on QC  metrics
 
 A sumary of this process is shown below in the diagram that was generated when running Nextflow using the -with-dag command
 
@@ -57,7 +60,7 @@ These will be found in the directory specified by the `--output_dir` argument
     - `<SAMPLE NAME>.extendedFrags.fastq.gz` merged reads
     - `<SAMPLE NAME>.notCombined_1.fastq.gz` unmerged read 1 reads
     - `<SAMPLE NAME>.notCombined_2.fastq.gz` unmerged read 2 reads
-  - A directory called `assembly` containing the final assembled scaffold files named as `<SAMPLE NAME>_scaffolds.fasta`
+  - A directory called `assemblies` containing the final assembled scaffold files named as `<SAMPLE NAME>_scaffolds.fasta`. If the qc_conditions argument was given there will be subdirectories named pass, warning and failure where the appropiately QCed scaffolds and failure reasons will be stored.
   - A directory called `quast` containing
     - The quast assembly QC reports for each sample names  `<SAMPLE NAME>_qusat_report.tsv`
     - A summary qust report named `combined_quast_report.tsv`
@@ -72,5 +75,7 @@ These will be found in the directory specified by the `--output_dir` argument
   - [SPAdes](http://cab.spbu.ru/software/spades/) A genome assembly algorithm designed for single cell and multi-cells bacterial data sets.
   - [contig-tools](https://pypi.org/project/contig-tools/) A utility Python package to parse multi fasta files resulting from de novo assembly.
   - [Quast](http://quast.sourceforge.net/quast) A tool to evaluate the aulaity of genome assemblies.
+  - [ConFindr](https://lowandrew.github.io/ConFindr/) Software that can detect contamination in bacterial NGS data, both between and within species.
+  - [QualiFyr](https://gitlab.com/cgps/qualifyr) Software to give an overall QC status for a sample based on multiple QC metric files
 
 
