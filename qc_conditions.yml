@@ -58,11 +58,7 @@ fastqc:
         condition_type: eq
         condition_value: FAIL
 confindr:
-  'r1_contam_status':
-    failure:
-      condition_type: eq
-      condition_value: 'True'
-  'r2_contam_status':
+  'contam_status':
     failure:
       condition_type: eq
       condition_value: 'True'

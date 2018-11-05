@@ -314,9 +314,17 @@ process check_for_contamination {
   output:
   set pair_id, file('confindr_report.csv') into confindr_files
 
-  """
-  confindr.py -i . -o . -d . -t 1 -bf 0.025 -b 2 -Xmx 1500m
-  """
+  script:
+  if (file_pair[0] =~ /_R1/){ // files with _R1 and _R2
+    """
+    confindr.py -i . -o . -d . -t 1 -bf 0.025 -b 2 -Xmx 1500m
+    """
+  } else { // files with _1 and _2
+    """
+    confindr.py -i . -o . -d . -t 1 -bf 0.025 -b 2 -Xmx 1500m -fid _1 -rid _2
+    """  
+  }
+
 }
 
 
