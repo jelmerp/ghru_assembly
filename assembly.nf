@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.1'
+version = '1.2'
 /*
 
 ========================================================================================
@@ -27,7 +27,7 @@ def helpMessage() {
     The typical command for running the pipeline is as follows:
     Mandatory arguments:
       --output_dir     Path to output directory
-      --adapter_sequences  The path to a fasta file containing adapter sequences to trim from reads
+      --adapter_file  The path to a fasta file containing adapter sequences to trim from reads
     Optional arguments:
       Either input_dir and fastq_pattern must be specified if using local short reads or accession_number_file if specifying samples in the SRA for which the fastqs will be downloaded
       --input_dir      Path to input directory containing the fastq files to be assembled
@@ -36,6 +36,7 @@ def helpMessage() {
       --depth_cutoff The estimated depth to downsample each sample to. If not specified no downsampling will occur
       --minimum_scaffold_length The minimum length of a scaffold to keep. Others will be filtered out. Default 500
       --minimum_scaffold_depth The minimum depth of coverage a scaffold must have to be kept. Others will be filtered out. Default 3
+      --qc_conditions Path to a YAML file containing pass/warning/fail conditions used by QualiFyr (https://gitlab.com/cgps/qualifyr)
    """.stripIndent()
 }
 
@@ -64,6 +65,7 @@ params.adapter_file = false
 params.depth_cutoff = false
 params.minimum_scaffold_length = false
 params.minimum_scaffold_depth = false
+params.qc_conditions = false
 
 // check if getting data either locally or from SRA
 Helper.check_optional_parameters(params, ['input_dir', 'accession_number_file'])
@@ -228,9 +230,15 @@ process qc_post_trimming {
 
   output:
   file('*.html')
+  set pair_id, file("${pair_id}_R1_fastqc.txt"), file("${pair_id}_R2_fastqc.txt") into qc_post_trimming_files
 
+  script:
+  r1_prefix = file_pair[0].baseName.split('\\.')[0]
+  r2_prefix = file_pair[1].baseName.split('\\.')[0]
   """
-  fastqc ${file_pair[0]} ${file_pair[1]}
+  fastqc ${file_pair[0]} ${file_pair[1]} --extract
+  mv ${r1_prefix}_fastqc/summary.txt ${pair_id}_R1_fastqc.txt
+  mv ${r2_prefix}_fastqc/summary.txt ${pair_id}_R2_fastqc.txt
   """
 }
 
@@ -260,7 +268,6 @@ def find_genome_size(pair_id, mash_output) {
 mash_output.map { pair_id, file -> find_genome_size(pair_id, file.text) }.into{genome_size_estimation_for_read_correction; genome_size_estimation_for_downsampling}
 
 trimmed_fastqs_and_genome_size = trimmed_fastqs_for_correction.join(genome_size_estimation_for_read_correction).map{ tuple -> [tuple[0], tuple[1], tuple[2]]}
-// trimmed_fastqs_and_genome_size.subscribe{println it}
 
 // Read Corection
 process read_correction {
@@ -275,7 +282,7 @@ process read_correction {
 
   output:
   set pair_id, file('lighter.out') into read_correction_output
-  set pair_id, file('corrected_fastqs/*.fastq.gz') into corrected_fastqs
+  set pair_id, file('corrected_fastqs/*.fastq.gz') into corrected_fastqs_for_merging, corrected_fastqs_for_contamination_check
 
   """
   lighter -od corrected_fastqs -r  ${file_pair[0]} -r  ${file_pair[1]} -K 32 ${genome_size}  -maxcor 1 2> lighter.out
@@ -291,6 +298,25 @@ def find_average_depth(pair_id, lighter_output){
   m = lighter_output =~  /.+Average coverage is ([0-9]+\.[0-9]+)\s.+/
   average_depth = Float.parseFloat(m[0][1])
   return [pair_id, average_depth]
+}
+
+// Check for contamination
+process check_for_contamination {
+  tag {pair_id}
+
+  publishDir "${output_dir}/confindr",
+    mode: 'copy',
+    saveAs: { file -> "${pair_id}_${file}"}
+
+  input:
+  set pair_id, file(file_pair) from corrected_fastqs_for_contamination_check
+
+  output:
+  set pair_id, file('confindr_report.csv') into confindr_files
+
+  """
+  confindr.py -i . -o . -d . -t 1 -bf 0.025 -b 2 -Xmx 1500m
+  """
 }
 
 
@@ -315,7 +341,7 @@ def find_total_number_of_bases(pair_id, seqtk_fqchk_ouput){
   return [pair_id, total_bases]
 }
 base_counts = seqtk_fqchk_output.map { pair_id, file -> find_total_number_of_bases(pair_id, file.text) }
-corrected_fastqs_and_genome_size_and_base_count = corrected_fastqs.join(genome_size_estimation_for_downsampling).join(base_counts).map{ tuple -> [tuple[0], tuple[1], tuple[2], tuple[3]]}
+corrected_fastqs_and_genome_size_and_base_count = corrected_fastqs_for_merging.join(genome_size_estimation_for_downsampling).join(base_counts).map{ tuple -> [tuple[0], tuple[1], tuple[2], tuple[3]]}
 
 // merge reads and potentially downsample
 process merge_reads{
@@ -381,14 +407,11 @@ process spades_assembly {
 process filter_scaffolds {
   tag { pair_id }
 
-  publishDir "${output_dir}/assembly",
-  mode: 'copy'
-
   input:
   set pair_id, file(scaffold_file) from scaffolds
 
   output:
-  set pair_id, file("${pair_id}_scaffolds.fasta") into scaffolds_for_single_analysis
+  set pair_id, file("${pair_id}_scaffolds.fasta") into scaffolds_for_single_analysis, scaffolds_for_qc
   file("${pair_id}_scaffolds.fasta") into scaffolds_for_combined_analysis
   
   """
@@ -411,7 +434,7 @@ process quast {
   set pair_id, file(contig_file) from scaffolds_for_single_analysis
 
   output:
-  set pair_id, file('report.tsv')
+  set pair_id, file('report.tsv') into quast_files
 
   """
   quast.py ${contig_file} -o .
@@ -420,7 +443,7 @@ process quast {
 
 // assess assembly with Quast but in a single file
 process quast_summary {
-  tag { 'quast_summary' }
+  tag { 'quast summary' }
   
   publishDir "${output_dir}/quast",
     mode: 'copy',
@@ -438,6 +461,82 @@ process quast_summary {
   """
 }
 
+// determine overall quality of sample
+if (params.qc_conditions) {
+
+
+  qc_conditions_yml = file(params.qc_conditions)
+  quality_files = qc_post_trimming_files.join(confindr_files).join(quast_files).join(scaffolds_for_qc)
+  process overall_quality {
+    tag { pair_id }
+
+
+    publishDir "${output_dir}/assemblies/pass",
+      mode: 'copy',
+      pattern: 'assemblies/pass/*',
+      saveAs: { file -> file.split('\\/')[-1] }
+
+    publishDir "${output_dir}/assemblies/warning",
+      mode: 'copy',
+      pattern: 'assemblies/warning/*',
+      saveAs: { file -> file.split('\\/')[-1] }
+    
+    publishDir "${output_dir}/assemblies/failure",
+      mode: 'copy',
+      pattern: 'assemblies/failure/*',
+      saveAs: { file -> file.split('\\/')[-1] }
+
+    input:
+    file(qc_conditions_yml)
+    set pair_id, file(fastqc_report_r1), file(fastqc_report_r2), file(confindr_report), file(quast_report), file(scaffold_file) from quality_files
+
+    output:
+    file('assemblies/**/*')
+
+
+    """
+    result=`qualifyr -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} 2> ERR`
+    return_code=\$?
+    if [[ \$return_code -ne 0 ]]; then
+      exit 1;
+    else
+      errors=`< ERR`
+      if [[ \$result == "PASS" ]]; then
+        qc_level="pass"
+      elif [[ \$result == "WARNING" ]]; then
+        qc_level="warning"
+      elif [[ \$result == "FAILURE" ]]; then
+        qc_level="failure"
+      fi
+      mkdir -p assemblies/\${qc_level}
+      mv ${scaffold_file} assemblies/\${qc_level}/
+
+      if [[ \$result != "PASS" ]]; then
+        mv ERR assemblies/\${qc_level}/${pair_id}_qc_result.tsv
+      fi
+    fi
+    """
+  }
+} else {
+  process write_assembly_to_dir {
+    tag { pair_id }
+
+    publishDir "${output_dir}",
+      mode: 'copy'
+
+    input:
+    set pair_id, file(scaffold_file) from scaffolds_for_qc
+
+    output:
+    file("assemblies/${scaffold_file}")
+
+    """
+    mkdir assemblies
+    mv ${scaffold_file} assemblies/
+    """
+
+  }
+}
 
 
 workflow.onComplete {
