@@ -202,6 +202,8 @@ min_read_length_and_raw_fastqs = min_read_length_for_trimming.join(raw_fastqs_fo
 
 // Trimming
 process trimming {
+  memory '4 GB'
+  
   tag { pair_id }
   
   input:
@@ -213,7 +215,7 @@ process trimming {
 
   """
   mkdir trimmed_fastqs
-  trimmomatic PE -phred33 ${file_pair[0]} ${file_pair[1]} trimmed_fastqs/${file_pair[0]} /dev/null trimmed_fastqs/${file_pair[1]} /dev/null ILLUMINACLIP:adapter_file.fas:2:30:10 SLIDINGWINDOW:4:20 LEADING:25 TRAILING:25 MINLEN:${min_read_length}  
+  trimmomatic PE -threads 1 -phred33 ${file_pair[0]} ${file_pair[1]} trimmed_fastqs/${file_pair[0]} /dev/null trimmed_fastqs/${file_pair[1]} /dev/null ILLUMINACLIP:adapter_file.fas:2:30:10 SLIDINGWINDOW:4:20 LEADING:25 TRAILING:25 MINLEN:${min_read_length}  
   """
 }
 
