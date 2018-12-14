@@ -67,7 +67,7 @@
         - docker
 
     - name: Check authorized_keys
-      stat: path=/root/.ssh/authorized_keys
+      stat: path=/home/ubuntu/.ssh/authorized_keys
       register: ssh_keys
 
     - debug:
@@ -75,7 +75,7 @@
       when: not ssh_keys.stat.exists
 
     - name: Get authorized keys
-      shell: cat /root/.ssh/authorized_keys
+      shell: cat /home/ubuntu/.ssh/authorized_keys
       register: authorized_keys
       when: ssh_keys.stat.exists
 
@@ -100,16 +100,7 @@
       loop_control:
         label: "{{ item | regex_search('([^ ]+)$') }}"
       when: ssh_keys.stat.exists
-
-    - name: Authorized keys
-      copy:
-        dest: '/home/{{ primary_user }}/.ssh/authorized_keys'
-        group: biousers
-        owner: '{{ primary_user }}'
-        src: '/root/.ssh/authorized_keys'
-        mode: 0600
-      when: ssh_keys.stat.exists
-
+    
     - name: No password login
       lineinfile:
         path: /etc/ssh/sshd_config
