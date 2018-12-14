@@ -6,8 +6,6 @@
 
   vars:
     primary_user: biouser
-    sudoers:
-      - biouser
 
   tasks:
 
@@ -15,19 +13,18 @@
     - name: Install dependencies of docker
       apt:
         update_cache: yes
-        pkg: '{{ item }}'
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
         state: present
-      with_items:
-        - apt-transport-https
-        - ca-certificates
-        - curl
-        - software-properties-common
-    
+
     - name: Add docker Apt signing key
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
-    
+
     - name: Add docker repo
       apt_repository:
         repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable
@@ -36,85 +33,192 @@
     - name: Install docker
       apt:
         update_cache: yes
-        pkg: '{{ item }}'
+        pkg: docker-ce
         state: present
-      with_items:
-        - docker-ce
 
   # Make a user (biouser) with sudo and docker permissions
-    - name: Make primary user
-      user:
-        name: '{{ primary_user }}'
-        password: '$6$DlwXvJxCkCa0g191$U9WN32K/huWJD3k3tuldIvwPWhkOtGO9nhMFKfb0OWqiF6nUI2DMwecwcM0NakHDuydTiB.Jyeh1XSNPuPzxj.'
-        shell: /bin/bash
-        state: present
-        force: yes
-        
-    - name: Expire primary userpassword
-      command: 'chage -d 0 {{ primary_user }}'
-
-    - name: update sshd config
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^PasswordAuthentication.*no'
-        line: 'PasswordAuthentication yes'
-      notify: restart_sshd
-
-    - name: Make sure we have a 'wheel' group
+    - name: Make groups
       group:
-        name: wheel
+        name: '{{ item }}'
         state: present
+      with_items:
+      - biousers
+      - docker
 
-    - name: Allow 'wheel' group to have passwordless sudo
+    - name: Allow 'biousers' group to have passwordless sudo
       lineinfile:
         dest: /etc/sudoers
         state: present
-        regexp: '^%wheel'
-        line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+        regexp: '^%biousers'
+        line: '%biousers ALL=(ALL) NOPASSWD: ALL'
         validate: visudo -cf %s
 
-    - name: Make sure we have a 'docker' group
-      group:
-        name: docker
-        state: present
-  
-    - name: Add sudoers users to wheel and docker group
+    - name: Make primary user
       user:
-        name: '{{ item }}'
-        groups:
-          - wheel
-          - docker
+        name: '{{ primary_user }}'
         append: yes
-      with_items: '{{ sudoers }}'
+        create_home: yes
+        group: biousers
+        state: present
+        shell: /bin/bash
+        force: yes
+        groups:
+        - biousers
+        - docker
+
+    - name: Check authorized_keys
+      stat: path=/home/ubuntu/.ssh/authorized_keys
+      register: ssh_keys
+
+    - debug:
+        msg: "WARNING: We've left password and root account login open because /root/.ssh/authorized_keys is missing"
+      when: not ssh_keys.stat.exists
+
+    - name: Get authorized keys
+      shell: cat /home/ubuntu/.ssh/authorized_keys
+      register: authorized_keys
+      when: ssh_keys.stat.exists
+
+    - name: Creates directory
+      file:
+        path: '/home/{{ primary_user }}/.ssh'
+        group: biousers
+        owner: '{{ primary_user }}'
+        mode: 0700
+        state: directory
+
+    - name: Set authorized keys
+      lineinfile:
+        path: '/home/{{ primary_user }}/.ssh/authorized_keys'
+        create: yes
+        group: biousers
+        owner: '{{ primary_user }}'
+        mode: 0600
+        line: '{{ item }}'
+      with_items:
+      - "{{ authorized_keys.stdout_lines }}"
+      loop_control:
+        label: "{{ item | regex_search('([^ ]+)$') }}"
+      when: ssh_keys.stat.exists
+    
+    - name: No password login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      when: ssh_keys.stat.exists
+      notify: restart_sshd
+
+    - name: No root login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin no'
+      when: ssh_keys.stat.exists
+      notify: restart_sshd
+
+  # Harden the server a bit
+    - name: Install security dependencies
+      apt:
+        update_cache: yes
+        pkg:
+          - ufw
+          - fail2ban
+          - unattended-upgrades
+          - iptables-persistent
+        state: present
+
+    - name: Upgrade APT to the latest packages
+      apt:
+        upgrade: safe
+
+    - name: Allow ssh connections
+      # Connections to docker containers are handled below
+      ufw:
+        rule: allow
+        port: '{{ item }}'
+      with_items:
+        - 22
+
+    - name: Enable ufw/firewall
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Existing docker firewall rules
+      command: iptables -L DOCKER-USER
+      register: docker_firewall
+      no_log: True
+
+    - name: Drop connections to docker
+      command: 'iptables -I DOCKER-USER -i eth0 -p tcp -j DROP -m comment --comment "{{ item.comment }}"'
+      with_items:
+        - comment: drop docker other
+      when: "'{{ item.comment }}' not in docker_firewall.stdout"
+      loop_control:
+        label: "Firewall {{ item.comment }}"
+
+    - name: Allow connections to docker
+      # Make sure this goes after the drop otherwise it won't make sense
+      command: 'iptables -I DOCKER-USER -i eth0 -p tcp -m conntrack --ctorigdstport {{ item.port }} -j ACCEPT -m comment --comment "{{ item.comment }}"'
+      with_items:
+        - comment: accept docker http
+          port: 80
+          jump: ACCEPT
+        - comment: accept docker https
+          port: 443
+          jump: ACCEPT
+      when: "'{{ item.comment }}' not in docker_firewall.stdout"
+      loop_control:
+        label: "Firewall {{ item.comment }}"
+
+    - name: Run automatic updates
+      lineinfile:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        state: present
+        create: yes
+        owner: root
+        group: root
+        regexp: '^APT::Periodic::Unattended-Upgrade'
+        line: 'APT::Periodic::Unattended-Upgrade "1";'
+
+    - name: Configure fail2ban
+      lineinfile:
+        dest: /etc/fail2ban/jail.local
+        state: present
+        regexp: '^maxretry'
+        line: 'maxretry = 10'
+        create: yes
+      notify: restart_fail2ban
 
   # Install nextflow
     - name: Install dependencies of nextflow
       apt:
         update_cache: yes
-        pkg: '{{ item }}'
+        pkg: default-jre-headless
         state: present
-      with_items:
-        - default-jre-headless
+
+    - name: Check nextflow exists
+      stat: path=/usr/local/.nextflow
+      register: nextflow_dir
 
     - name: Download nextflow installer
-      get_url: 
+      get_url:
         url: https://get.nextflow.io
         dest: '/usr/local/bin/nextflow'
         mode: 0755
+      when: not nextflow_dir.stat.exists
 
     - name: Execute the nextflow installer
       shell: '/usr/local/bin/nextflow'
+      when: not nextflow_dir.stat.exists
 
-    - name: Delete .nextflow directory in case it already exists
-      file:
-        path: /usr/local/.nextflow 
-        state: absent
-    
     - name: Move nextflow dependecies
       command: "{{ item }}"
       with_items:
        - mv /root/.nextflow /usr/local/.nextflow
        - chmod -R o+rw /usr/local/.nextflow
+      when: not nextflow_dir.stat.exists
 
   # add nextflow env variable to primary user .bashrc
     - name: Load nextflow env variable NXF_HOME automatically in ~/.bashrc
@@ -126,16 +230,17 @@
       with_items:
         - '# Nextflow functionality'
         - 'export NXF_HOME="/usr/local/.nextflow"'
-    
+
     - name: Install pip2 and pip3
       apt:
         update_cache: yes
-        pkg: '{{ item }}'
+        pkg:
+          - python3-pip
+          - python-pip
+          - python3-setuptools
+          - python-setuptools
         state: present
-      with_items:
-        - python3-pip
-        - python-pip
-    
+
     - name: clone flowcraft
       git:
         repo: 'https://github.com/assemblerflow/flowcraft.git'
@@ -154,10 +259,22 @@
     - name: pull the GHRU assembly docker image
       docker_image:
         name: bioinformant/ghru-assembly:latest
-  
+
   handlers:
   - name: restart_sshd
     service:
       name: sshd
       state: restarted
+  - name: restart_fail2ban
+    service:
+      name: fail2ban
+      state: restarted
+  - name: iptables save
+    command: netfilter-persistent save
+    notify: ufw restart
+  - name: ufw restart
+    service:
+      name: ufw
+      state: restarted
+
 
