@@ -36,25 +36,6 @@
         pkg: docker-ce
         state: present
 
-  # Add Docker compose
-    - name: Get compose package
-      shell: "echo -n docker-compose-$(uname -s)-$(uname -m)"
-      args:
-        creates: /usr/local/bin/docker-compose
-      register: docker_compose_package
-
-    - name: Get compose version
-      uri: url="https://api.github.com/repos/docker/compose/releases/latest" return_content=yes
-      register: docker_compose_version
-      when: not docker_compose_package is skipped
-      no_log: True
-
-    - name: Download docker-compose
-      get_url:
-        url: "https://github.com/docker/compose/releases/download/{{ (docker_compose_version.content | from_json)['name'] }}/{{ docker_compose_package.stdout }}"
-        dest: '/usr/local/bin/docker-compose'
-        mode: 0755
-
   # Make a user (biouser) with sudo and docker permissions
     - name: Make groups
       group:
