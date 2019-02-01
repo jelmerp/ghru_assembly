@@ -9,11 +9,11 @@ nextflow run assembly.nf [options] -with-docker bioinformant/ghru-assembly:1.1 -
 To run the test sets either of the following commands will work
  - Using  local fastqs and no down sampling
     ```
-    nextflow run assembly.nf --input_dir test_input --output_dir test_output --fastq_pattern "*_{1,2}.fastq.gz" --adapter_file adapters.fas -with-docker bioinformant/ghru-assembly:1.2 -resume
+    nextflow run assembly.nf --input_dir test_input --output_dir test_output --fastq_pattern "*{R,_}{1,2}*.fastq.gz" --adapter_file adapters.fas -with-docker bioinformant/ghru-assembly:1.2 -resume
     ```
  - Using accession numbers to fetch short reads and downsampling to a depth cutofff of 50
     ```
-    nextflow run assembly.nf --accession_number_file accessions.txt --output_dir test_output --fastq_pattern "*_{1,2}.fastq.gz" --adapter_file adapters.fas --depth_cutoff 50 -with-docker bioinformant/ghru-assembly:1.2 -resume
+    nextflow run assembly.nf --accession_number_file accessions.txt --output_dir test_output --fastq_pattern "*{R,_}{1,2}*.fastq.gz" --adapter_file adapters.fas --depth_cutoff 50 -with-docker bioinformant/ghru-assembly:1.2 -resume
     ```
 
 The mandatory options that should be supplied are

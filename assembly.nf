@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.2'
+version = '1.3'
 /*
 
 ========================================================================================
@@ -31,7 +31,7 @@ def helpMessage() {
     Optional arguments:
       Either input_dir and fastq_pattern must be specified if using local short reads or accession_number_file if specifying samples in the SRA for which the fastqs will be downloaded
       --input_dir      Path to input directory containing the fastq files to be assembled
-      --fastq_pattern  The regular expression that will match fastq files e.g '*_{1,2}.fastq.gz'
+      --fastq_pattern  The regular expression that will match fastq files e.g '*{R,_}{1,2}*.fastq.gz'
       --accession_number_file Path to a text file containing a list of accession numbers (1 per line)
       --depth_cutoff The estimated depth to downsample each sample to. If not specified no downsampling will occur
       --minimum_scaffold_length The minimum length of a scaffold to keep. Others will be filtered out. Default 500
@@ -183,7 +183,7 @@ process determine_min_read_length {
 process qc_pre_trimming {
   tag { pair_id }
   
-  publishDir "${output_dir}/qc_pre_trimming",
+  publishDir "${output_dir}/fastqc/pre_trimming",
     mode: 'copy',
     pattern: "*.html"
 
@@ -223,7 +223,7 @@ process trimming {
 process qc_post_trimming {
   tag { pair_id }
 
-  publishDir "${output_dir}/qc_post_trimming",
+  publishDir "${output_dir}/fastqc/post_trimming",
     mode: 'copy',
     pattern: "*.html"
   
@@ -233,6 +233,7 @@ process qc_post_trimming {
   output:
   file('*.html')
   set pair_id, file("${pair_id}_R1_fastqc.txt"), file("${pair_id}_R2_fastqc.txt") into qc_post_trimming_files
+  set file("${r1_prefix}_fastqc"), file("${r2_prefix}_fastqc") into fastqc_directories
 
   script:
   r1_prefix = file_pair[0].baseName.split('\\.')[0]
@@ -244,7 +245,27 @@ process qc_post_trimming {
   """
 }
 
+//FastQC MultiQC
+process fastqc_multiqc {
+  tag { 'multiqc for fastqc' }
 
+  publishDir "${output_dir}/fastqc/post_trimming",
+    mode: 'copy',
+    pattern: "multiqc_report.html",
+    saveAs: { "fastqc_multiqc_report.html" }
+
+  input:
+  file(fastqc_directories) from fastqc_directories.collect { it }
+
+  output:
+  file("multiqc_report.html")
+
+  script:
+  """
+  multiqc .
+  """
+
+}
 // Genome Size Estimation
 process genome_size_estimation {
   tag { pair_id }
@@ -414,6 +435,7 @@ process spades_assembly {
 
 }
 
+// filter scaffolds to remove small and low coverage contigs
 process filter_scaffolds {
   tag { pair_id }
 
@@ -438,37 +460,65 @@ process quast {
   publishDir "${output_dir}/quast",
     mode: 'copy',
     pattern: "report.tsv",
-    saveAs: { file -> "${pair_id}_quast_${file}"}
+    saveAs: { file -> "${pair_id}_quast_" + file.split('\\/')[-1] }
 
   input:
   set pair_id, file(contig_file) from scaffolds_for_single_analysis
 
   output:
-  set pair_id, file('report.tsv') into quast_files
+  set pair_id, file("${pair_id}") into quast_files_for_multiqc
+  set pair_id, file("${pair_id}/report.tsv") into quast_files_for_qualifyr
 
   """
   quast.py ${contig_file} -o .
+  mkdir ${pair_id}
+  ln -s \$PWD/report.tsv ${pair_id}/report.tsv
   """
 }
+
 
 // assess assembly with Quast but in a single file
 process quast_summary {
   tag { 'quast summary' }
+  memory '4 GB'
   
   publishDir "${output_dir}/quast",
     mode: 'copy',
-    pattern: "report.tsv",
-    saveAs: { file -> "combined_quast_report.tsv"}
+    pattern: "*report.tsv",
+    saveAs: { file -> "combined_${file}"}
 
   input:
   file(contig_files) from scaffolds_for_combined_analysis.toSortedList{ it.getBaseName() }
 
   output:
-  file('report.tsv')
+  file("*report.tsv")
 
   """
   quast.py ${contig_files} -o .
   """
+}
+
+
+//QUAST MultiQC
+process quast_multiqc {
+  tag { 'multiqc for quast' }
+
+  publishDir "${output_dir}/quality_reports",
+    mode: 'copy',
+    pattern: "multiqc_report.html",
+    saveAs: { "quast_multiqc_report.html" }
+
+  input:
+  file(quast_reports) from quast_files_for_multiqc.collect { it }
+
+  output:
+  file("multiqc_report.html")
+
+  script:
+  """
+  multiqc .
+  """
+
 }
 
 // determine overall quality of sample
@@ -476,7 +526,7 @@ if (params.qc_conditions) {
 
 
   qc_conditions_yml = file(params.qc_conditions)
-  quality_files = qc_post_trimming_files.join(confindr_files).join(quast_files).join(scaffolds_for_qc)
+  quality_files = qc_post_trimming_files.join(confindr_files).join(quast_files_for_qualifyr).join(scaffolds_for_qc)
   process overall_quality {
     tag { pair_id }
 
@@ -502,15 +552,15 @@ if (params.qc_conditions) {
 
     output:
     file('assemblies/**/*')
+    set file("${pair_id}.qualifyr.json") into qualifyr_json_files
 
 
     """
-    result=`qualifyr -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} 2> ERR`
+    result=`qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -s ${pair_id} 2> ERR`
     return_code=\$?
     if [[ \$return_code -ne 0 ]]; then
       exit 1;
     else
-      errors=`< ERR`
       if [[ \$result == "PASS" ]]; then
         qc_level="pass"
       elif [[ \$result == "WARNING" ]]; then
@@ -525,6 +575,8 @@ if (params.qc_conditions) {
         mv ERR assemblies/\${qc_level}/${pair_id}_qc_result.tsv
       fi
     fi
+    # make json file
+    qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -s ${pair_id} -j -o .
     """
   }
 } else {
@@ -548,6 +600,28 @@ if (params.qc_conditions) {
   }
 }
 
+//QualiFyr report
+process qualifyr_report {
+  tag { 'qualifyr report' }
+
+  publishDir "${output_dir}/quality_reports",
+    mode: 'copy',
+    pattern: "qualifyr_report.html"
+
+  input:
+  
+  file(json_files) from qualifyr_json_files.collect { it }
+
+  output:
+  file("qualifyr_report.html")
+
+  script:
+  """
+  export LANG="en_GB.UTF-8"
+  qualifyr report -i .
+  """
+
+}
 
 workflow.onComplete {
   Helper.complete_message(params, workflow, version)
