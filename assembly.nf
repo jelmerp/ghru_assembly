@@ -36,6 +36,7 @@ def helpMessage() {
       --depth_cutoff The estimated depth to downsample each sample to. If not specified no downsampling will occur
       --minimum_scaffold_length The minimum length of a scaffold to keep. Others will be filtered out. Default 500
       --minimum_scaffold_depth The minimum depth of coverage a scaffold must have to be kept. Others will be filtered out. Default 3
+      --confindr_db_path The path to the confindr database. If not set assumes using Docker image where the path is '/home/bio/software_data/confindr_database'
       --qc_conditions Path to a YAML file containing pass/warning/fail conditions used by QualiFyr (https://gitlab.com/cgps/qualifyr)
    """.stripIndent()
 }
@@ -65,6 +66,7 @@ params.adapter_file = false
 params.depth_cutoff = false
 params.minimum_scaffold_length = false
 params.minimum_scaffold_depth = false
+params.confindr_db_path = false
 params.qc_conditions = false
 
 // check if getting data either locally or from SRA
@@ -92,6 +94,14 @@ if ( params.minimum_scaffold_depth ) {
   minimum_scaffold_depth = params.minimum_scaffold_depth
 } else {
   minimum_scaffold_depth = 3
+}
+
+// set up confindr database path
+if ( params.confindr_db_path ) {
+  confindr_db_path = params.confindr_db_path
+} else {
+  // path in Docker image
+  confindr_db_path = "/home/bio/software_data/confindr_database"
 }
 
 // set up read_pair channel
@@ -249,7 +259,7 @@ process qc_post_trimming {
 process fastqc_multiqc {
   tag { 'multiqc for fastqc' }
 
-  publishDir "${output_dir}/fastqc/post_trimming",
+  publishDir "${output_dir}/quality_reports",
     mode: 'copy',
     pattern: "multiqc_report.html",
     saveAs: { "fastqc_multiqc_report.html" }
@@ -340,11 +350,11 @@ process check_for_contamination {
   script:
   if (file_pair[0] =~ /_R1/){ // files with _R1 and _R2
     """
-    confindr.py -i . -o . -d . -t 1 -bf 0.025 -b 2 -Xmx 1500m
+    confindr.py -i . -o . -d ${confindr_db_path} -t 1 -bf 0.025 -b 2 -Xmx 1500m
     """
   } else { // files with _1 and _2
     """
-    confindr.py -i . -o . -d . -t 1 -bf 0.025 -b 2 -Xmx 1500m -fid _1 -rid _2
+    confindr.py -i . -o . -d ${confindr_db_path} -t 1 -bf 0.025 -b 2 -Xmx 1500m -fid _1 -rid _2
     """  
   }
 
@@ -552,7 +562,7 @@ if (params.qc_conditions) {
 
     output:
     file('assemblies/**/*')
-    set file("${pair_id}.qualifyr.json") into qualifyr_json_files
+    file("${pair_id}.qualifyr.json") into qualifyr_json_files
 
 
     """
@@ -617,7 +627,6 @@ process qualifyr_report {
 
   script:
   """
-  export LANG="en_GB.UTF-8"
   qualifyr report -i .
   """
 

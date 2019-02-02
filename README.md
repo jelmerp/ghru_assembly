@@ -4,7 +4,7 @@ This [Nextflow](https://www.nextflow.io/) workflow can be used to process short 
 Typically the workflow should be run as follows
 
 ```
-nextflow run assembly.nf [options] -with-docker bioinformant/ghru-assembly:1.2 -resume 
+nextflow run assembly.nf [options] -with-docker bioinformant/ghru-assembly:latest -resume 
 ```
 To run the test sets either of the following commands will work
  - Using  local fastqs and no down sampling
