@@ -4,16 +4,17 @@ This [Nextflow](https://www.nextflow.io/) workflow can be used to process short 
 Typically the workflow should be run as follows
 
 ```
-nextflow run assembly.nf [options] -with-docker bioinformant/ghru-assembly:1.2 -resume 
+nextflow run assembly.nf [options] -with-docker bioinformant/ghru-assembly:latest -resume 
 ```
 To run the test sets either of the following commands will work
  - Using  local fastqs and no down sampling
     ```
-    nextflow run assembly.nf --input_dir test_input --output_dir test_output --fastq_pattern "*_{1,2}.fastq.gz" --adapter_file adapters.fas -with-docker bioinformant/ghru-assembly:1.2 -resume
+    nextflow run assembly.nf --input_dir test_input --output_dir test_output --fastq_pattern "*{R,_}{1,2}*.fastq.gz" --adapter_file adapters.fas --qc_conditions qc_conditions.yml -with-docker bioinformant/ghru-assembly:latest -resume
     ```
  - Using accession numbers to fetch short reads and downsampling to a depth cutofff of 50
     ```
-    nextflow run assembly.nf --accession_number_file accessions.txt --output_dir test_output --fastq_pattern "*_{1,2}.fastq.gz" --adapter_file adapters.fas --depth_cutoff 50 -with-docker bioinformant/ghru-assembly:1.2 -resume
+    
+    nextflow run assembly.nf --accession_number_file accessions.txt --output_dir test_output  --adapter_file adapters.fas --depth_cutoff 50 --qc_conditions qc_conditions.yml -with-docker bioinformant/ghru-assembly:latest -resume
     ```
 
 The mandatory options that should be supplied are
@@ -27,7 +28,7 @@ Optional arguments include
   - `--depth_cutoff` argument. Downsample each sample to an approximate depth of the value supplied e.g 50 means downsample to 50x depth of coverage . If not specified no downsampling will occur
   - The minimum length of a scaffold to keep is specified using the `--minimum_scaffold_length` argument. Others will be filtered out. Default 500 
   - The minimum depth of coverage a scaffold must have in order to be kept is specified by the `--minimum_scaffold_depth` argument. Others will be filtered out. Default 3 
-  - Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr). An example of the format can be seen [here](qc_conditions.yml)
+  - Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr). An example of the format can be seen [here](qc_conditions.yml) and [another](qc_conditions_nextera.yml)  more suitable for reads generated from a Nextera library preparation
 
 ## Workflow process
 The workflow consists of the following steps
@@ -48,13 +49,13 @@ The workflow consists of the following steps
 
 A sumary of this process is shown below in the diagram that was generated when running Nextflow using the -with-dag command
 
-![workflow diagram](dag.png)
+![workflow diagram](readme_images/dag.png)
 
 ## Workflow outputs
 These will be found in the directory specified by the `--output_dir` argument
 
   - (Optional) If accession numbers were used as the input source a directory called `fastqs` will contain the fastq file pairs for each accession number
-  -  Directories called `qc_pre_trimming` and `qc_post_trimming` containing the Fastqc reports for each fastq as html pages
+  -  Directories called `pre_trimming` and `post_trimming` with a `fastqc` parent directory will contain the Fastqc reports for each fastq in html format
   - A directory called `corrected_fastqs` that contains the fastq files that have been trimmed with Trimmomatic and corrected using Lighter
   - A directory called `merged_fastqs` that contains the fastq files that have been merged using Flash. There will be a files called
     - `<SAMPLE NAME>.extendedFrags.fastq.gz` merged reads
@@ -62,8 +63,14 @@ These will be found in the directory specified by the `--output_dir` argument
     - `<SAMPLE NAME>.notCombined_2.fastq.gz` unmerged read 2 reads
   - A directory called `assemblies` containing the final assembled scaffold files named as `<SAMPLE NAME>_scaffolds.fasta`. If the qc_conditions argument was given there will be subdirectories named pass, warning and failure where the appropiately QCed scaffolds and failure reasons will be stored.
   - A directory called `quast` containing
-    - The quast assembly QC reports for each sample names  `<SAMPLE NAME>_qusat_report.tsv`
-    - A summary qust report named `combined_quast_report.tsv`
+    - A summary quast report named `combined_quast_report.tsv`
+    - A transposed summary quast report with the samples as rows so that they can be sorted based on the quast metric in columns named `combined_quast_report.tsv`
+  - A directory called `quality_reports` containing html reports
+    - [MultiQC](https://multiqc.info/) summary reports combining QC results for all samples from
+      - FastQC: fastqc_multiqc_report.html
+      - Quast: quast_multiqc_report.html
+    - A QualiFyr report: qualifyr_report.html - If a qc_conditions.yml file was supplied this will contain a summary of the overall pass/fail status of each sample. E.g:
+      ![QualiFyr Report](readme_images/qualifyr_report.png)
 
 ## Software used within the workflow
   - [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) A quality control tool for high throughput sequence data.
@@ -77,5 +84,6 @@ These will be found in the directory specified by the `--output_dir` argument
   - [Quast](http://quast.sourceforge.net/quast) A tool to evaluate the aulaity of genome assemblies.
   - [ConFindr](https://lowandrew.github.io/ConFindr/) Software that can detect contamination in bacterial NGS data, both between and within species.
   - [QualiFyr](https://gitlab.com/cgps/qualifyr) Software to give an overall QC status for a sample based on multiple QC metric files
+  - [MultiQC](https://multiqc.info/) Aggregate results from bioinformatics analyses across many samples into a single report
 
 

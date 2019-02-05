@@ -1,0 +1,60 @@
+quast:
+  '# contigs (>= 1000 bp)':
+    warning:
+      condition_type: gt
+      condition_value: 75
+    failure:
+      condition_type: gt
+      condition_value: 150
+  'N50':
+    warning:
+      condition_type: lt
+      condition_value: 100000
+    failure:
+      condition_type: lt
+      condition_value: 50000
+fastqc:
+  'Basic Statistics':
+    warning:
+      condition_type: eq
+      condition_value: WARN
+    failure:
+      condition_type: eq
+      condition_value: FAIL
+  'Per base sequence quality':
+      failure:
+        condition_type: eq
+        condition_value: FAIL
+  'Per sequence quality scores':
+      failure:
+        condition_type: eq
+        condition_value: FAIL
+  'Per sequence GC content':
+      failure:
+        condition_type: eq
+        condition_value: FAIL
+  'Per base N content':
+      failure:
+        condition_type: eq
+        condition_value: FAIL
+  'Sequence Length Distribution':
+      failure:
+        condition_type: eq
+        condition_value: FAIL
+  'Sequence Duplication Levels':
+      warning:
+        condition_type: eq
+        condition_value: FAIL
+  'Overrepresented sequences':
+      failure:
+        condition_type: eq
+        condition_value: FAIL
+  'Adapter Content':
+      failure:
+        condition_type: eq
+        condition_value: FAIL
+confindr:
+  'contam_status':
+    failure:
+      condition_type: eq
+      condition_value: 'True'
