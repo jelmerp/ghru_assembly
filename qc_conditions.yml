@@ -13,6 +13,13 @@ quast:
     failure:
       condition_type: lt
       condition_value: 50000
+  'Total length (>= 1000 bp)':
+    warning:
+      condition_type: gt
+      condition_value: 10000000
+    warning:
+      condition_type: lt
+      condition_value: 500000
 fastqc:
   'Basic Statistics':
     warning:

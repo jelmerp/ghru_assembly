@@ -627,7 +627,7 @@ process qualifyr_report {
 
   script:
   """
-  qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),confindr.contam_status'
+  qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status'
   """
 
 }
