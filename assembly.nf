@@ -250,8 +250,8 @@ process qc_post_trimming {
   r2_prefix = file_pair[1].baseName.split('\\.')[0]
   """
   fastqc ${file_pair[0]} ${file_pair[1]} --extract
-  mv ${r1_prefix}_fastqc/summary.txt ${pair_id}_R1_fastqc.txt
-  mv ${r2_prefix}_fastqc/summary.txt ${pair_id}_R2_fastqc.txt
+  cp ${r1_prefix}_fastqc/summary.txt ${pair_id}_R1_fastqc.txt
+  cp ${r2_prefix}_fastqc/summary.txt ${pair_id}_R2_fastqc.txt
   """
 }
 
