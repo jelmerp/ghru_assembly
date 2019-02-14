@@ -38,6 +38,7 @@ def helpMessage() {
       --minimum_scaffold_depth The minimum depth of coverage a scaffold must have to be kept. Others will be filtered out. Default 3
       --confindr_db_path The path to the confindr database. If not set assumes using Docker image where the path is '/home/bio/software_data/confindr_database'
       --qc_conditions Path to a YAML file containing pass/warning/fail conditions used by QualiFyr (https://gitlab.com/cgps/qualifyr)
+      --prescreen_size_check Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
    """.stripIndent()
 }
 
@@ -68,6 +69,7 @@ params.minimum_scaffold_length = false
 params.minimum_scaffold_depth = false
 params.confindr_db_path = false
 params.qc_conditions = false
+params.prescreen_size_check = false
 
 // check if getting data either locally or from SRA
 Helper.check_optional_parameters(params, ['input_dir', 'accession_number_file'])
@@ -102,6 +104,12 @@ if ( params.confindr_db_path ) {
 } else {
   // path in Docker image
   confindr_db_path = "/home/bio/software_data/confindr_database"
+}
+
+if (params.prescreen_size_check){
+  prescreen_size_check = params.prescreen_size_check
+} else {
+  prescreen_size_check = false
 }
 
 // set up read_pair channel
@@ -169,9 +177,60 @@ if (params.accession_number_file){
 }
 
 
+def find_genome_size(pair_id, mash_output) {
+  m = mash_output =~ /Estimated genome size: (.+)/
+  genome_size = Float.parseFloat(m[0][1]).toInteger()
+  return [pair_id, genome_size]
+}
+
+if ( prescreen_size_check ) {
+  // Prescreen Genome Size Estimation
+
+  raw_fastqs.into {raw_fastqs_for_genome_size_prescreening; raw_fastqs_for_filtering}
+
+  process pre_screen_genome_size_estimation {
+    tag { pair_id }
+    
+    input:
+    set pair_id, file(file_pair)  from raw_fastqs_for_genome_size_prescreening
+
+    output:
+    set pair_id, file('mash_stats.out') into pre_screen_mash_output
+
+    """
+    mash sketch -o /tmp/sketch_${pair_id}  -k 32 -m 3 -r ${file_pair[0]}  2> mash_stats.out
+    """
+  }
+
+  pre_screen_mash_output.map { pair_id, file -> find_genome_size(pair_id, file.text) }.into{ genome_size_estimation_for_inclusion; genome_size_estimation_for_exclusion }
+
+  // determine genomes to take for further processing
+  included_genomes_based_on_size = genome_size_estimation_for_inclusion.filter { it[1] <= prescreen_size_check }
+  raw_fastqs_for_processing = raw_fastqs_for_filtering.join(included_genomes_based_on_size).map { items -> [items[0], items[1]] }
+
+  // write out excluded genomes to file
+  excluded_genomes_based_on_size = genome_size_estimation_for_exclusion.filter { it[1] > prescreen_size_check }
+  process write_out_excluded_genomes {
+    tag { pair_id }
+    
+    publishDir "${output_dir}/estimated_size_of_excluded_genomes"
+    input:
+    set pair_id, genome_size from excluded_genomes_based_on_size
+
+    output:
+    file("${pair_id}.estimated_genome_size.txt") 
+
+    """
+    echo ${genome_size} > ${pair_id}.estimated_genome_size.txt
+    """
+  }
+} else {
+  raw_fastqs_for_processing = raw_fastqs
+}
+
 
 // duplicate raw fastq channel for trimming and qc
-raw_fastqs.into {raw_fastqs_for_qc; raw_fastqs_for_trimming; raw_fastqs_for_length_assessment}
+raw_fastqs_for_processing.into {raw_fastqs_for_qc; raw_fastqs_for_trimming; raw_fastqs_for_length_assessment}
 
 // Assess read length and make MIN LEN for trimmomatic 1/3 of this value
 process determine_min_read_length {
@@ -289,12 +348,6 @@ process genome_size_estimation {
   """
   mash sketch -o /tmp/sketch_${pair_id}  -k 32 -m 3 -r ${file_pair[0]}  2> mash_stats.out
   """
-}
-
-def find_genome_size(pair_id, mash_output) {
-  m = mash_output =~ /Estimated genome size: (.+)/
-  genome_size = Float.parseFloat(m[0][1]).toInteger()
-  return [pair_id, genome_size]
 }
 
 // channel to output genome size from mash output
@@ -487,6 +540,8 @@ process quast {
 }
 
 
+sorted_contigs =  scaffolds_for_combined_analysis.toSortedList( { a, b -> a.getBaseName() <=> b.getBaseName()} )
+
 // assess assembly with Quast but in a single file
 process quast_summary {
   tag { 'quast summary' }
@@ -498,15 +553,20 @@ process quast_summary {
     saveAs: { file -> "combined_${file}"}
 
   input:
-  file(contig_files) from scaffolds_for_combined_analysis.toSortedList{ it.getBaseName() }
+  file(contig_files) from sorted_contigs
 
   output:
-  file("*report.tsv")
+  file("*report.tsv") optional true
 
   """
-  quast.py ${contig_files} -o .
+  contig_files='${contig_files}'
+  if [ -n "\$contig_files" ]
+  then
+    quast.py ${contig_files} -o .
+  fi
   """
 }
+
 
 
 //QUAST MultiQC
@@ -589,6 +649,29 @@ if (params.qc_conditions) {
     qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -s ${pair_id} -j -o .
     """
   }
+
+
+  //QualiFyr report
+  process qualifyr_report {
+    tag { 'qualifyr report' }
+
+    publishDir "${output_dir}/quality_reports",
+      mode: 'copy',
+      pattern: "qualifyr_report.html"
+
+    input:
+    
+    file(json_files) from qualifyr_json_files.collect { it }
+
+    output:
+    file("qualifyr_report.html")
+
+    script:
+    """
+    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status'
+    """
+
+  }
 } else {
   process write_assembly_to_dir {
     tag { pair_id }
@@ -608,28 +691,6 @@ if (params.qc_conditions) {
     """
 
   }
-}
-
-//QualiFyr report
-process qualifyr_report {
-  tag { 'qualifyr report' }
-
-  publishDir "${output_dir}/quality_reports",
-    mode: 'copy',
-    pattern: "qualifyr_report.html"
-
-  input:
-  
-  file(json_files) from qualifyr_json_files.collect { it }
-
-  output:
-  file("qualifyr_report.html")
-
-  script:
-  """
-  qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status'
-  """
-
 }
 
 workflow.onComplete {
