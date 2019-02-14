@@ -302,15 +302,22 @@ process qc_post_trimming {
   output:
   file('*.html')
   set pair_id, file("${pair_id}_R1_fastqc.txt"), file("${pair_id}_R2_fastqc.txt") into qc_post_trimming_files
-  set file("${r1_prefix}_fastqc"), file("${r2_prefix}_fastqc") into fastqc_directories
+  set file("${r1_prefix}_fastqc_data"), file("${r2_prefix}_fastqc_data") into fastqc_directories
 
   script:
   r1_prefix = file_pair[0].baseName.split('\\.')[0]
   r2_prefix = file_pair[1].baseName.split('\\.')[0]
   """
   fastqc ${file_pair[0]} ${file_pair[1]} --extract
-  cp ${r1_prefix}_fastqc/summary.txt ${pair_id}_R1_fastqc.txt
-  cp ${r2_prefix}_fastqc/summary.txt ${pair_id}_R2_fastqc.txt
+  # rename files
+  mv ${r1_prefix}_fastqc/summary.txt ${pair_id}_R1_fastqc.txt
+  mv ${r2_prefix}_fastqc/summary.txt ${pair_id}_R2_fastqc.txt
+
+  # move files for fastqc
+  mkdir ${r1_prefix}_fastqc_data
+  mkdir ${r2_prefix}_fastqc_data
+  mv ${r1_prefix}_fastqc/fastqc_data.txt ${r1_prefix}_fastqc_data
+  mv ${r2_prefix}_fastqc/fastqc_data.txt ${r2_prefix}_fastqc_data
   """
 }
 
