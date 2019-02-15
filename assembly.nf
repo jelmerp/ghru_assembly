@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.3'
+version = '1.3.1'
 /*
 
 ========================================================================================
@@ -471,11 +471,11 @@ process merge_reads{
     mkdir downsampled_fastqs
     seqtk sample  ${file_pair[0]} ${downsampling_factor} | gzip > downsampled_fastqs/${file_pair[0]}
     seqtk sample  ${file_pair[1]} ${downsampling_factor} | gzip > downsampled_fastqs/${file_pair[1]}
-    flash -m 20 -M 100 -d merged_fastqs -o ${pair_id} -z downsampled_fastqs/${file_pair[0]} downsampled_fastqs/${file_pair[1]} 
+    flash -m 20 -M 100 -t 1 -d merged_fastqs -o ${pair_id} -z downsampled_fastqs/${file_pair[0]} downsampled_fastqs/${file_pair[1]} 
     """
   } else {
     """
-    flash -m 20 -M 100 -d merged_fastqs -o ${pair_id} -z ${file_pair[0]} ${file_pair[1]} 
+    flash -m 20 -M 100 -t 1 -d merged_fastqs -o ${pair_id} -z ${file_pair[0]} ${file_pair[1]} 
     """
   }
 
@@ -552,8 +552,6 @@ process quast {
 }
 
 
-sorted_contigs =  scaffolds_for_combined_analysis.toSortedList( { a, b -> a.getBaseName() <=> b.getBaseName()} )
-
 // assess assembly with Quast but in a single file
 process quast_summary {
   tag { 'quast summary' }
@@ -565,17 +563,13 @@ process quast_summary {
     saveAs: { file -> "combined_${file}"}
 
   input:
-  file(contig_files) from sorted_contigs
+  file(contig_files) from scaffolds_for_combined_analysis.collect( sort: {a, b -> a.getBaseName() <=> b.getBaseName()} )
 
   output:
   file("*report.tsv") optional true
 
   """
-  contig_files='${contig_files}'
-  if [ -n "\$contig_files" ]
-  then
-    quast.py ${contig_files} -o .
-  fi
+  quast.py ${contig_files} -o .
   """
 }
 
