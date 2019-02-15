@@ -198,7 +198,9 @@ if ( prescreen_size_check ) {
     set pair_id, file('mash_stats.out') into pre_screen_mash_output
 
     """
-    mash sketch -o /tmp/sketch_${pair_id}  -k 32 -m 3 -r ${file_pair[0]}  2> mash_stats.out
+    kat hist --mer_len 21  --thread 1 --output_prefix ${pair_id} ${file_pair[0]} > /dev/null 2>&1 \
+    && minima=`cat  ${pair_id}.dist_analysis.json | jq '.global_minima .freq' | tr -d '\n'`
+    mash sketch -o sketch_${pair_id}  -k 32 -m \$minima -r ${file_pair[0]}  2> mash_stats.out
     """
   }
 
@@ -354,7 +356,9 @@ process genome_size_estimation {
   set pair_id, file('mash_stats.out') into mash_output
 
   """
-  mash sketch -o /tmp/sketch_${pair_id}  -k 32 -m 3 -r ${file_pair[0]}  2> mash_stats.out
+  kat hist --mer_len 21  --thread 1 --output_prefix ${pair_id} ${file_pair[0]} > /dev/null 2>&1 \
+  && minima=`cat  ${pair_id}.dist_analysis.json | jq '.global_minima .freq' | tr -d '\n'`
+  mash sketch -o sketch_${pair_id}  -k 32 -m \$minima -r ${file_pair[0]}  2> mash_stats.out
   """
 }
 
