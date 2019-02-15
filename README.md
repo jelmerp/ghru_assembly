@@ -26,9 +26,11 @@ The mandatory options that should be supplied are
 
 Optional arguments include
   - `--depth_cutoff` argument. Downsample each sample to an approximate depth of the value supplied e.g 50 means downsample to 50x depth of coverage . If not specified no downsampling will occur
-  - The minimum length of a scaffold to keep is specified using the `--minimum_scaffold_length` argument. Others will be filtered out. Default 500 
-  - The minimum depth of coverage a scaffold must have in order to be kept is specified by the `--minimum_scaffold_depth` argument. Others will be filtered out. Default 3 
-  - Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr). An example of the format can be seen [here](qc_conditions.yml) and [another](qc_conditions_nextera.yml)  more suitable for reads generated from a Nextera library preparation
+  - `--minimum_scaffold_length` The minimum length of a scaffold to keep. Others will be filtered out. Default 500 
+  - `--minimum_scaffold_depth` The minimum depth of coverage a scaffold must have in order to be kept. Others will be filtered out. Default 3 
+  - `--confindr_db_path` The path to the confindr database. If not set assumes use of the Docker image where the path is '/home/bio/software_data/confindr_database'
+  - `--qc_conditions` Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr). An example of the format can be seen [here](qc_conditions.yml) and [another](qc_conditions_nextera.yml)  more suitable for reads generated from a Nextera library preparation
+  - `--prescreen_size_check` Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
 
 ## Workflow process
 The workflow consists of the following steps
@@ -85,5 +87,6 @@ These will be found in the directory specified by the `--output_dir` argument
   - [ConFindr](https://lowandrew.github.io/ConFindr/) Software that can detect contamination in bacterial NGS data, both between and within species.
   - [QualiFyr](https://gitlab.com/cgps/qualifyr) Software to give an overall QC status for a sample based on multiple QC metric files
   - [MultiQC](https://multiqc.info/) Aggregate results from bioinformatics analyses across many samples into a single report
+  - [KAT](https://github.com/TGAC/KAT) The K-mer Analysis Toolkit (KAT) contains a number of tools that analyse and compare K-mer spectra
 
 
