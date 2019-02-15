@@ -324,6 +324,7 @@ process qc_post_trimming {
 //FastQC MultiQC
 process fastqc_multiqc {
   tag { 'multiqc for fastqc' }
+  memory '4 GB'
 
   publishDir "${output_dir}/quality_reports",
     mode: 'copy',
