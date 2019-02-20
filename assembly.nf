@@ -265,7 +265,7 @@ process qc_pre_trimming {
   file('*.html')
 
   """
-  fastqc ${file_pair[0]} ${file_pair[1]} --threads 1 
+  fastqc ${file_pair[0]} ${file_pair[1]} 
   """
 }
 
@@ -310,7 +310,7 @@ process qc_post_trimming {
   r1_prefix = file_pair[0].baseName.split('\\.')[0]
   r2_prefix = file_pair[1].baseName.split('\\.')[0]
   """
-  fastqc ${file_pair[0]} ${file_pair[1]} --extract --threads 1 
+  fastqc ${file_pair[0]} ${file_pair[1]} --extract
   # rename files
   mv ${r1_prefix}_fastqc/summary.txt ${pair_id}_R1_fastqc.txt
   mv ${r2_prefix}_fastqc/summary.txt ${pair_id}_R2_fastqc.txt
