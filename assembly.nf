@@ -265,7 +265,7 @@ process qc_pre_trimming {
   file('*.html')
 
   """
-  fastqc ${file_pair[0]} ${file_pair[1]} 
+  fastqc ${file_pair[0]} ${file_pair[1]}
   """
 }
 
