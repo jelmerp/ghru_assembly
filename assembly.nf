@@ -432,7 +432,7 @@ process spades_assembly {
   set pair_id, file("scaffolds.fasta") into scaffolds
 
   script:
-  if (min_read_length.toInteger() < 27 ) {
+  if (min_read_length.toInteger() < 27 ) { // this is the read length divided by 3 see trimming step
     kmers = '21,33,43,53'
   } else {
     kmers = '21,33,43,53,63,75'
