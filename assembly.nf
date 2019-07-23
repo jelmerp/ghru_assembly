@@ -38,7 +38,8 @@ def helpMessage() {
       --minimum_scaffold_depth The minimum depth of coverage a scaffold must have to be kept. Others will be filtered out. Default 3
       --confindr_db_path The path to the confindr database. If not set assumes using Docker image where the path is '/home/bio/software_data/confindr_database'
       --qc_conditions Path to a YAML file containing pass/warning/fail conditions used by QualiFyr (https://gitlab.com/cgps/qualifyr)
-      --prescreen_size_check Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
+      --prescreen_genome_size_check Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
+      --prescreen_file_size_check Minumum size in Mb for the input fastq files. Without this any size of file will be attempted (this and prescreen_genome_size_check are mutually exclusive)
    """.stripIndent()
 }
 
@@ -69,7 +70,8 @@ params.minimum_scaffold_length = false
 params.minimum_scaffold_depth = false
 params.confindr_db_path = false
 params.qc_conditions = false
-params.prescreen_size_check = false
+params.prescreen_genome_size_check = false
+params.prescreen_file_size_check = false
 
 // check if getting data either locally or from SRA
 Helper.check_optional_parameters(params, ['input_dir', 'accession_number_file'])
@@ -106,10 +108,16 @@ if ( params.confindr_db_path ) {
   confindr_db_path = "/home/bio/software_data/confindr_database"
 }
 
-if (params.prescreen_size_check){
-  prescreen_size_check = params.prescreen_size_check
+if (params.prescreen_genome_size_check){
+  prescreen_genome_size_check = params.prescreen_genome_size_check
 } else {
-  prescreen_size_check = false
+  prescreen_genome_size_check = false
+}
+
+if (params.prescreen_file_size_check){
+  prescreen_file_size_check = params.prescreen_file_size_check
+} else {
+  prescreen_file_size_check = 15
 }
 
 // set up read_pair channel
@@ -183,7 +191,7 @@ def find_genome_size(pair_id, mash_output) {
   return [pair_id, genome_size]
 }
 
-if ( prescreen_size_check ) {
+if ( prescreen_genome_size_check ) {
   // Prescreen Genome Size Estimation
 
   raw_fastqs.into {raw_fastqs_for_genome_size_prescreening; raw_fastqs_for_filtering}
@@ -207,11 +215,11 @@ if ( prescreen_size_check ) {
   pre_screen_mash_output.map { pair_id, file -> find_genome_size(pair_id, file.text) }.into{ genome_size_estimation_for_inclusion; genome_size_estimation_for_exclusion }
 
   // determine genomes to take for further processing
-  included_genomes_based_on_size = genome_size_estimation_for_inclusion.filter { it[1] <= prescreen_size_check }
+  included_genomes_based_on_size = genome_size_estimation_for_inclusion.filter { it[1] <= prescreen_genome_size_check }
   raw_fastqs_for_processing = raw_fastqs_for_filtering.join(included_genomes_based_on_size).map { items -> [items[0], items[1]] }
 
   // write out excluded genomes to file
-  excluded_genomes_based_on_size = genome_size_estimation_for_exclusion.filter { it[1] > prescreen_size_check }
+  excluded_genomes_based_on_size = genome_size_estimation_for_exclusion.filter { it[1] > prescreen_genome_size_check }
   process write_out_excluded_genomes {
     tag { pair_id }
     
@@ -226,6 +234,26 @@ if ( prescreen_size_check ) {
     echo ${genome_size} > ${pair_id}.estimated_genome_size.txt
     """
   }
+} else if (prescreen_file_size_check){
+  raw_fastqs.into {raw_fastqs_for_genome_size_prescreening; raw_fastqs_for_filtering}
+
+  process determine_fastq_filesize {
+    tag { pair_id }
+    
+    input:
+    set pair_id, file(file_pair)  from raw_fastqs_for_genome_size_prescreening
+
+    output:
+    set pair_id, stdout into pre_screen_file_sizes_for_inclusion, pre_screen_file_sizes_for_exclusion
+
+    """
+    stat -Lc %s ${file_pair[0]} |  awk '{printf "%f", \$1/1000000}'
+    """
+  }
+  included_genomes_based_on_file_size = pre_screen_file_sizes_for_inclusion.filter { it[1].toFloat() >= prescreen_file_size_check }
+  excluded_genomes_based_on_file_size = pre_screen_file_sizes_for_exclusion.filter { it[1].toFloat() < prescreen_file_size_check }
+  
+  raw_fastqs_for_processing = raw_fastqs_for_filtering.join(included_genomes_based_on_file_size).map { items -> [items[0], items[1]] } 
 } else {
   raw_fastqs_for_processing = raw_fastqs
 }
@@ -282,7 +310,7 @@ process trimming {
   file('adapter_file.fas') from adapter_file
 
   output:
-  set pair_id, file('trimmed_fastqs/*.fastq.gz') into trimmed_fastqs_for_qc, trimmed_fastqs_for_correction, trimmed_fastqs_for_genome_size_estimation, trimmed_fastqs_for_base_counting
+  set pair_id, file('trimmed_fastqs/*.fastq.gz') into trimmed_fastqs_for_qc, trimmed_fastqs_for_correction, trimmed_fastqs_for_genome_size_estimation, trimmed_fastqs_for_base_counting, trimmed_fastqs_for_species_id
 
   """
   mkdir trimmed_fastqs
@@ -341,10 +369,27 @@ process fastqc_multiqc {
 
   script:
   """
-  multiqc .
+  multiqc --interactive .
   """
 
 }
+// Species ID
+process species_identification {
+  tag{pair_id}
+
+  input:
+  set pair_id, file(file_pair)  from trimmed_fastqs_for_species_id
+
+  output:
+  set pair_id, file("species_investigation*.tsv") into bactinspector_output
+
+  script:
+  """
+  bactinspector check_species -fq ${file_pair[0]} 
+  """
+
+}
+
 // Genome Size Estimation
 process genome_size_estimation {
   tag { pair_id }
@@ -592,7 +637,7 @@ process quast_multiqc {
 
   script:
   """
-  multiqc .
+  multiqc --interactive .
   """
 
 }
@@ -602,7 +647,7 @@ if (params.qc_conditions) {
 
 
   qc_conditions_yml = file(params.qc_conditions)
-  quality_files = qc_post_trimming_files.join(confindr_files).join(quast_files_for_qualifyr).join(scaffolds_for_qc)
+  quality_files = qc_post_trimming_files.join(confindr_files).join(quast_files_for_qualifyr).join(scaffolds_for_qc).join(bactinspector_output)
   process overall_quality {
     tag { pair_id }
 
@@ -624,7 +669,7 @@ if (params.qc_conditions) {
 
     input:
     file(qc_conditions_yml)
-    set pair_id, file(fastqc_report_r1), file(fastqc_report_r2), file(confindr_report), file(quast_report), file(scaffold_file) from quality_files
+    set pair_id, file(fastqc_report_r1), file(fastqc_report_r2), file(confindr_report), file(quast_report), file(scaffold_file), file(bactinspector_report) from quality_files
 
     output:
     file('assemblies/**/*')
@@ -632,7 +677,15 @@ if (params.qc_conditions) {
 
 
     """
-    result=`qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -s ${pair_id} 2> ERR`
+    # extract min and max genome sizes from bactinspector output and replace place holder in conditions file
+    MAX_GENOME_LENGTH=\$(cat ${bactinspector_report} | awk -F'\t' 'NR == 2 {print \$8}')
+    MIN_GENOME_LENGTH=\$(cat ${bactinspector_report} | awk -F'\t' 'NR == 2 {print \$9}')
+
+    sed -i "s/MAX_GENOME_LENGTH/\${MAX_GENOME_LENGTH}/" ${qc_conditions_yml} 
+    sed -i "s/MIN_GENOME_LENGTH/\${MIN_GENOME_LENGTH}/" ${qc_conditions_yml}
+
+
+    result=`qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -b ${bactinspector_report} -s ${pair_id} 2> ERR`
     return_code=\$?
     if [[ \$return_code -ne 0 ]]; then
       exit 1;
@@ -651,13 +704,32 @@ if (params.qc_conditions) {
         mv ERR assemblies/\${qc_level}/${pair_id}_qc_result.tsv
       fi
     fi
+
+
     # make json file
-    qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -s ${pair_id} -j -o .
+    qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -b ${bactinspector_report} -s ${pair_id} -j -o .
     """
   }
+  failed_sample_json_template = file("${baseDir}/templates/file_size_failed_sample.qualifyr.json")
+  process make_qualifyr_output_for_failed_samples {
+    input:
+    set pair_id, file_size from excluded_genomes_based_on_file_size
+    file(json_template) from failed_sample_json_template
 
+    output:
+    file("${pair_id}.qualifyr.json") into file_size_failure_qualifyr_json_files
 
+    script:
+    """
+    sed "s/SAMPLE_NAME/${pair_id}/" ${json_template} > ${pair_id}.qualifyr.json
+    sed -i "s/FILE_SIZE/${file_size}/" ${pair_id}.qualifyr.json
+    sed -i "s/FS_THRESHOLD/${prescreen_file_size_check}/" ${pair_id}.qualifyr.json
+    """
+  }
   //QualiFyr report
+
+  combined_qualifyr_json_files = qualifyr_json_files.concat(file_size_failure_qualifyr_json_files)
+
   process qualifyr_report {
     tag { 'qualifyr report' }
 
@@ -667,14 +739,14 @@ if (params.qc_conditions) {
 
     input:
     
-    file(json_files) from qualifyr_json_files.collect { it }
+    file(json_files) from combined_qualifyr_json_files.collect { it }
 
     output:
     file("qualifyr_report.html")
 
     script:
     """
-    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status'
+    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status,bactinspector.species'
     """
 
   }
