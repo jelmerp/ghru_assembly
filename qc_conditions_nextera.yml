@@ -16,10 +16,10 @@ quast:
   'Total length (>= 1000 bp)':
     warning:
       condition_type: gt
-      condition_value: 10000000
+      condition_value: MAX_GENOME_LENGTH
     warning:
       condition_type: lt
-      condition_value: 500000
+      condition_value: MIN_GENOME_LENGTH
 fastqc:
   'Basic Statistics':
     warning:
@@ -65,3 +65,12 @@ confindr:
     failure:
       condition_type: eq
       condition_value: 'True'
+bactinspector:
+  'result':
+    warning:
+      condition_type: eq
+      condition_value: 'uncertain'
+  'species':
+    warning:
+      condition_type: eq
+      condition_value: ''
