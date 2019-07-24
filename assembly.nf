@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.3.1'
+version = '1.4.0'
 /*
 
 ========================================================================================
@@ -335,8 +335,8 @@ process qc_post_trimming {
   set file("${r1_prefix}_fastqc_data"), file("${r2_prefix}_fastqc_data") into fastqc_directories
 
   script:
-  r1_prefix = file_pair[0].baseName.split('\\.')[0]
-  r2_prefix = file_pair[1].baseName.split('\\.')[0]
+  r1_prefix = file_pair[0].baseName.replaceFirst(/\\.gz$/, '').split('\\.')[0..-2].join('.')
+  r2_prefix = file_pair[1].baseName.replaceFirst(/\\.gz$/, '').split('\\.')[0..-2].join('.')
   """
   fastqc ${file_pair[0]} ${file_pair[1]} --extract
   # rename files
