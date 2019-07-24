@@ -15,11 +15,10 @@ quast:
       condition_value: 50000
   'Total length (>= 1000 bp)':
     warning:
-      condition_type: gt
-      condition_value: MAX_GENOME_LENGTH
-    warning:
-      condition_type: lt
-      condition_value: MIN_GENOME_LENGTH
+      condition_type: lt_or_gt
+      condition_value:
+        - MIN_GENOME_LENGTH
+        - MAX_GENOME_LENGTH
 fastqc:
   'Basic Statistics':
     warning:

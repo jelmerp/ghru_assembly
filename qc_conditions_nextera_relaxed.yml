@@ -2,17 +2,17 @@ quast:
   '# contigs (>= 1000 bp)':
     warning:
       condition_type: gt
-      condition_value: 75
+      condition_value: 150
     failure:
       condition_type: gt
-      condition_value: 150
+      condition_value: 300
   'N50':
     warning:
       condition_type: lt
-      condition_value: 100000
+      condition_value: 50000
     failure:
       condition_type: lt
-      condition_value: 50000
+      condition_value: 25000
   'Total length (>= 1000 bp)':
     warning:
       condition_type: lt_or_gt
@@ -33,10 +33,6 @@ fastqc:
         condition_value: FAIL
   'Per sequence quality scores':
       failure:
-        condition_type: eq
-        condition_value: FAIL
-  'Per base sequence content':
-      warning:
         condition_type: eq
         condition_value: FAIL
   'Per sequence GC content':
