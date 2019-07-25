@@ -73,3 +73,8 @@ bactinspector:
     warning:
       condition_type: eq
       condition_value: ''
+file_size_check:
+  'size':
+    failure:
+      condition_type: lt
+      condition_value: MIN_FILE_SIZE

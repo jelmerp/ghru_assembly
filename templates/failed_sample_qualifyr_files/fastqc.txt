@@ -1,0 +1,11 @@
+NA	Basic Statistics	SAMPLE_FILE
+NA	Per base sequence quality	SAMPLE_FILE
+NA	Per tile sequence quality	SAMPLE_FILE
+NA	Per sequence quality scores	SAMPLE_FILE
+NA	Per base sequence content	SAMPLE_FILE
+NA	Per sequence GC content	SAMPLE_FILE
+NA	Per base N content	SAMPLE_FILE
+NA	Sequence Length Distribution	SAMPLE_FILE
+NA	Sequence Duplication Levels	SAMPLE_FILE
+NA	Overrepresented sequences	SAMPLE_FILE
+NA	Adapter Content	SAMPLE_FILE

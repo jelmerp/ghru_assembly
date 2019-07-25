@@ -244,15 +244,35 @@ if ( prescreen_genome_size_check ) {
     set pair_id, file(file_pair)  from raw_fastqs_for_genome_size_prescreening
 
     output:
-    set pair_id, stdout into pre_screen_file_sizes_for_inclusion, pre_screen_file_sizes_for_exclusion
+    set pair_id, stdout into pre_screen_file_sizes_for_output_file_creation, pre_screen_file_sizes_for_inclusion, pre_screen_file_sizes_for_exclusion
 
+    script:
     """
     stat -Lc %s ${file_pair[0]} |  awk '{printf "%f", \$1/1000000}'
     """
   }
-  included_genomes_based_on_file_size = pre_screen_file_sizes_for_inclusion.filter { it[1].toFloat() >= prescreen_file_size_check }
-  excluded_genomes_based_on_file_size = pre_screen_file_sizes_for_exclusion.filter { it[1].toFloat() < prescreen_file_size_check }
+  process write_out_filesize_check {
+    tag { pair_id }
+
+    input:
+    set pair_id, file_size from pre_screen_file_sizes_for_output_file_creation
+
+    output:
+    set pair_id, file("${pair_id}.file_size_check.tsv") into file_size_checks
+
+    script:
+    """
+    echo "file\tsize\n${pair_id}\t${file_size}" > ${pair_id}.file_size_check.tsv
+    """
+  }
   
+  // filter files based on size
+  // included genomes
+  included_genomes_based_on_file_size = pre_screen_file_sizes_for_inclusion.filter { it[1].toFloat() >= prescreen_file_size_check }
+
+  // excluded genomes
+  excluded_genomes_based_on_file_size = pre_screen_file_sizes_for_exclusion.filter { it[1].toFloat() < prescreen_file_size_check }
+
   raw_fastqs_for_processing = raw_fastqs_for_filtering.join(included_genomes_based_on_file_size).map { items -> [items[0], items[1]] } 
 } else {
   raw_fastqs_for_processing = raw_fastqs
@@ -647,7 +667,7 @@ if (params.qc_conditions) {
 
 
   qc_conditions_yml = file(params.qc_conditions)
-  quality_files = qc_post_trimming_files.join(confindr_files).join(quast_files_for_qualifyr).join(scaffolds_for_qc).join(bactinspector_output)
+  quality_files = qc_post_trimming_files.join(confindr_files).join(quast_files_for_qualifyr).join(scaffolds_for_qc).join(bactinspector_output).join(file_size_checks)
   process overall_quality {
     tag { pair_id }
 
@@ -669,7 +689,7 @@ if (params.qc_conditions) {
 
     input:
     file(qc_conditions_yml)
-    set pair_id, file(fastqc_report_r1), file(fastqc_report_r2), file(confindr_report), file(quast_report), file(scaffold_file), file(bactinspector_report) from quality_files
+    set pair_id, file(fastqc_report_r1), file(fastqc_report_r2), file(confindr_report), file(quast_report), file(scaffold_file), file(bactinspector_report), file(file_size_check_output) from quality_files
 
     output:
     file('assemblies/**/*')
@@ -677,15 +697,18 @@ if (params.qc_conditions) {
 
 
     """
-    # extract min and max genome sizes from bactinspector output and replace place holder in conditions file
+    # extract min and max genome sizes from bactinspector output, min file size from
+    # file_size_check output and replace place holder in conditions file
     MAX_GENOME_LENGTH=\$(cat ${bactinspector_report} | awk -F'\t' 'NR == 2 {print \$8}')
     MIN_GENOME_LENGTH=\$(cat ${bactinspector_report} | awk -F'\t' 'NR == 2 {print \$9}')
+    MIN_FILE_SIZE=\$(cat ${file_size_check_output} | awk -F'\t' 'NR == 2 {print \$2}')    
 
     sed -i "s/MAX_GENOME_LENGTH/\${MAX_GENOME_LENGTH}/" ${qc_conditions_yml} 
     sed -i "s/MIN_GENOME_LENGTH/\${MIN_GENOME_LENGTH}/" ${qc_conditions_yml}
+    sed -i "s/MIN_FILE_SIZE/\${MIN_FILE_SIZE}/" ${qc_conditions_yml}
 
 
-    result=`qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -b ${bactinspector_report} -s ${pair_id} 2> ERR`
+    result=`qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -b ${bactinspector_report} -z ${file_size_check_output} -s ${pair_id} 2> ERR`
     return_code=\$?
     if [[ \$return_code -ne 0 ]]; then
       exit 1;
@@ -707,27 +730,38 @@ if (params.qc_conditions) {
 
 
     # make json file
-    qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -b ${bactinspector_report} -s ${pair_id} -j -o .
-
-    # add pre-screen block for samples passing this and have therefore made it this far
-    cat ${pair_id}.qualifyr.json | jq '.checks += {"pre-screen check": { "file size": { "metric_value": "NA", "check": "< ${prescreen_file_size_check}", "check_result": "PASS" }}}' > ${pair_id}.qualifyr.json.tmp
-    mv ${pair_id}.qualifyr.json.tmp ${pair_id}.qualifyr.json
+    qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -b ${bactinspector_report} -z ${file_size_check_output} -s ${pair_id} -j -o .
     """
   }
-  failed_sample_json_template = file("${baseDir}/templates/file_size_failed_sample.qualifyr.json")
+
+
+  failed_sample_conditions_file = file("${baseDir}/templates/failed_sample_qualifyr_files/conditions_for_failed_samples.yml")
+  bactinspector_file = file("${baseDir}/templates/failed_sample_qualifyr_files/bactinspector.tsv")
+  confindr_file = file("${baseDir}/templates/failed_sample_qualifyr_files/confindr.csv")
+  fastqc_file = file("${baseDir}/templates/failed_sample_qualifyr_files/fastqc.txt")
+  file_size_check_file = file("${baseDir}/templates/failed_sample_qualifyr_files/file_size_check.tsv")
+  quast_file = file("${baseDir}/templates/failed_sample_qualifyr_files/quast.txt")
   process make_qualifyr_output_for_failed_samples {
     input:
     set pair_id, file_size from excluded_genomes_based_on_file_size
-    file(json_template) from failed_sample_json_template
+
+    file(failed_sample_conditions_yml) from failed_sample_conditions_file
+    file(bactinspector_report) from bactinspector_file
+    file(confindr_report) from confindr_file
+    file(fastqc_report) from fastqc_file
+    file(file_size_check_report) from file_size_check_file
+    file(quast_report) from quast_file
 
     output:
     file("${pair_id}.qualifyr.json") into file_size_failure_qualifyr_json_files
 
     script:
     """
-    sed "s/SAMPLE_NAME/${pair_id}/" ${json_template} > ${pair_id}.qualifyr.json
-    sed -i "s/FILE_SIZE/${file_size}/" ${pair_id}.qualifyr.json
-    sed -i "s/FS_THRESHOLD/${prescreen_file_size_check}/" ${pair_id}.qualifyr.json
+    sed -i "s/FILE_SIZE/${file_size}/" ${file_size_check_file}
+    sed -i "s/MIN_FILE_SIZE/${prescreen_file_size_check}/" ${failed_sample_conditions_yml}
+
+    # make json file
+    qualifyr check -y ${failed_sample_conditions_yml} -f ${fastqc_report} ${fastqc_report} -c ${confindr_report}  -q ${quast_report} -b ${bactinspector_report} -z ${file_size_check_report} -s ${pair_id} -j -o .
     """
   }
   //QualiFyr report
@@ -739,14 +773,14 @@ if (params.qc_conditions) {
 
     publishDir "${output_dir}/quality_reports",
       mode: 'copy',
-      pattern: "qualifyr_report.html"
+      pattern: "qualifyr_report.*"
 
     input:
     
     file(json_files) from combined_qualifyr_json_files.collect { it }
 
     output:
-    file("qualifyr_report.html")
+    file("qualifyr_report.*")
 
     script:
     """
