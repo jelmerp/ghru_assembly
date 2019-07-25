@@ -44,7 +44,7 @@ fastqc:
         condition_type: eq
         condition_value: FAIL
   'Per base N content':
-      failure:
+      warning:
         condition_type: eq
         condition_value: FAIL
   'Sequence Length Distribution':
