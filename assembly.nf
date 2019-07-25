@@ -708,6 +708,10 @@ if (params.qc_conditions) {
 
     # make json file
     qualifyr check -y ${qc_conditions_yml} -f ${fastqc_report_r1} ${fastqc_report_r2} -c ${confindr_report}  -q ${quast_report} -b ${bactinspector_report} -s ${pair_id} -j -o .
+
+    # add pre-screen block for samples passing this and have therefore made it this far
+    cat ${pair_id}.qualifyr.json | jq '.checks += {"pre-screen check": { "file size": { "metric_value": "NA", "check": "< ${prescreen_file_size_check}", "check_result": "PASS" }}}' > ${pair_id}.qualifyr.json.tmp
+    mv ${pair_id}.qualifyr.json.tmp ${pair_id}.qualifyr.json
     """
   }
   failed_sample_json_template = file("${baseDir}/templates/file_size_failed_sample.qualifyr.json")
