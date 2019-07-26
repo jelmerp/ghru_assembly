@@ -1,0 +1,22 @@
+Assembly	SAMPLE_scaffolds
+# contigs (>= 0 bp)	NA
+# contigs (>= 1000 bp)	NA
+# contigs (>= 5000 bp)	NA
+# contigs (>= 10000 bp)	NA
+# contigs (>= 25000 bp)	NA
+# contigs (>= 50000 bp)	NA
+Total length (>= 0 bp)	NA
+Total length (>= 1000 bp)	NA
+Total length (>= 5000 bp)	NA
+Total length (>= 10000 bp)	NA
+Total length (>= 25000 bp)	NA
+Total length (>= 50000 bp)	NA
+# contigs	NA
+Largest contig	NA
+Total length	NA
+GC (%)	NA
+N50	NA
+N75	NA
+L50	NA
+L75	NA
+# N's per 100 kbp	NA

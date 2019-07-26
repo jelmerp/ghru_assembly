@@ -1,0 +1,69 @@
+quast:
+  '# contigs (>= 1000 bp)':
+    failure:
+      condition_type: ne
+      condition_value: NA
+  'N50':
+    failure:
+      condition_type: ne
+      condition_value: NA
+  'Total length (>= 1000 bp)':
+    failure:
+      condition_type: ne
+      condition_value: NA
+fastqc:
+  'Basic Statistics':
+    failure:
+      condition_type: ne
+      condition_value: NA
+  'Per base sequence quality':
+      failure:
+        condition_type: ne
+        condition_value: NA
+  'Per sequence quality scores':
+      failure:
+        condition_type: ne
+        condition_value: NA
+  'Per sequence GC content':
+      failure:
+        condition_type: ne
+        condition_value: NA
+  'Per base N content':
+      failure:
+        condition_type: ne
+        condition_value: NA
+  'Sequence Length Distribution':
+      failure:
+        condition_type: ne
+        condition_value: NA
+  'Sequence Duplication Levels':
+      failure:
+        condition_type: ne
+        condition_value: NA
+  'Overrepresented sequences':
+      failure:
+        condition_type: ne
+        condition_value: NA
+  'Adapter Content':
+      failure:
+        condition_type: ne
+        condition_value: NA
+confindr:
+  'contam_status':
+    failure:
+      condition_type: ne
+      condition_value: NA
+bactinspector:
+  'result':
+    warning:
+      condition_type: ne
+      condition_value: NA
+  'species':
+    warning:
+      condition_type: ne
+      condition_value: Unknown
+file_size_check:
+  'size':
+    failure:
+      condition_type: lt
+      condition_value: MIN_FILE_SIZE

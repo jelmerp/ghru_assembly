@@ -1,0 +1,143 @@
+{
+  "sample_name": "SAMPLE_NAME",
+  "result": "FAILURE",
+  "checks": {
+    "quast": {
+      "# contigs (>= 1000 bp)": {
+        "metric_value": "NA",
+        "check": "> 75",
+        "check_result": "PASS"
+      },
+      "N50": {
+        "metric_value": "NA",
+        "check": "< 100000",
+        "check_result": "PASS"
+      },
+      "Total length (>= 1000 bp)": {
+        "metric_value": "NA",
+        "check": "< 2664662",
+        "check_result": "PASS"
+      }
+    },
+    "fastqc 1": {
+      "Basic Statistics": {
+        "metric_value": "NA",
+        "check": "Equals WARN",
+        "check_result": "PASS"
+      },
+      "Per base sequence quality": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Per sequence quality scores": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Per sequence GC content": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Per base N content": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Sequence Length Distribution": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Sequence Duplication Levels": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Overrepresented sequences": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Adapter Content": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      }
+    },
+    "fastqc 2": {
+      "Basic Statistics": {
+        "metric_value": "NA",
+        "check": "Equals WARN",
+        "check_result": "PASS"
+      },
+      "Per base sequence quality": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Per sequence quality scores": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Per sequence GC content": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Per base N content": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Sequence Length Distribution": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Sequence Duplication Levels": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Overrepresented sequences": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      },
+      "Adapter Content": {
+        "metric_value": "NA",
+        "check": "Equals FAIL",
+        "check_result": "PASS"
+      }
+    },
+    "confindr": {
+      "contam_status": {
+        "metric_value": "NA",
+        "check": "Equals True",
+        "check_result": "PASS"
+      }
+    },
+    "bactinspector": {
+      "result": {
+        "metric_value": "NA",
+        "check": "Equals uncertain",
+        "check_result": "PASS"
+      },
+      "species": {
+        "metric_value": "NA",
+        "check": "Equals ",
+        "check_result": "PASS"
+      }
+    },
+    "pre-screen check": {
+      "file size": {
+        "metric_value": "FILE_SIZE Mb",
+        "check": "< FS_THRESHOLD",
+        "check_result": "FAILURE"
+      }
+    }
+  }
+}

@@ -15,11 +15,10 @@ quast:
       condition_value: 50000
   'Total length (>= 1000 bp)':
     warning:
-      condition_type: gt
-      condition_value: 10000000
-    warning:
-      condition_type: lt
-      condition_value: 500000
+      condition_type: lt_or_gt
+      condition_value:
+        - MIN_GENOME_LENGTH
+        - MAX_GENOME_LENGTH
 fastqc:
   'Basic Statistics':
     warning:
@@ -41,7 +40,7 @@ fastqc:
         condition_type: eq
         condition_value: FAIL
   'Per base N content':
-      failure:
+      warning:
         condition_type: eq
         condition_value: FAIL
   'Sequence Length Distribution':
@@ -65,3 +64,17 @@ confindr:
     failure:
       condition_type: eq
       condition_value: 'True'
+bactinspector:
+  'result':
+    warning:
+      condition_type: eq
+      condition_value: 'uncertain'
+  'species':
+    warning:
+      condition_type: eq
+      condition_value: ''
+file_size_check:
+  'size':
+    failure:
+      condition_type: lt
+      condition_value: MIN_FILE_SIZE
