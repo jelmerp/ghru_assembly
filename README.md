@@ -22,7 +22,7 @@ The mandatory options that should be supplied are
     - local files on disk using the `--input_dir` and `--fastq_pattern` arguments
     - from a list of short read archive ERR or SRR accession numbers contained within a file specified by the `--accession_number_file` argument
   - The output from the pipeline will be written to the directory specified by the `--output_dir` argument
-  - The path to a fasta file containing adapter sequences to trim from reads specified by the `--adapater_sequences` argument
+  - The path to a fasta file containing adapter sequences to trim from reads specified by the `--adapter_sequences` argument
 
 Optional arguments include
   - `--depth_cutoff` argument. Downsample each sample to an approximate depth of the value supplied e.g 50 means downsample to 50x depth of coverage . If not specified no downsampling will occur
@@ -30,7 +30,8 @@ Optional arguments include
   - `--minimum_scaffold_depth` The minimum depth of coverage a scaffold must have in order to be kept. Others will be filtered out. Default 3 
   - `--confindr_db_path` The path to the confindr database. If not set assumes use of the Docker image where the path is '/home/bio/software_data/confindr_database'
   - `--qc_conditions` Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr). An example of the format can be seen [here](qc_conditions.yml) and [another](qc_conditions_nextera.yml)  more suitable for reads generated from a Nextera library preparation
-  - `--prescreen_size_check` Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
+  - `--prescreen_genome_size_check` Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
+  - `--prescreen_file_size_check` Minumum size in Mb for the input fastq files. Without this any size of file will be attempted (this and prescreen_genome_size_check are mutually exclusive)
 
 ## Workflow process
 The workflow consists of the following steps
@@ -45,6 +46,7 @@ The workflow consists of the following steps
 8. Downsample reads if the `--depth_cutoff` argument was specified
 9. Merge reads using Flash where the insert size is small
 10. Assemble reads using SPAdes
+11. Assess species identification using [bactinspector](https://gitlab.com/antunderwood/bactinspector)
 11. Assess assembly quality using Quast
 12. Sumarise all assembly QCs using Quast
 13. (Optional if [QuailFyr](https://gitlab.com/cgps/qualifyr) qc conditions YAML file is supplied). Filter assemblies into three directories: pass, warning and failure based on QC  metrics
@@ -71,8 +73,9 @@ These will be found in the directory specified by the `--output_dir` argument
     - [MultiQC](https://multiqc.info/) summary reports combining QC results for all samples from
       - FastQC: fastqc_multiqc_report.html
       - Quast: quast_multiqc_report.html
-    - A QualiFyr report: qualifyr_report.html - If a qc_conditions.yml file was supplied this will contain a summary of the overall pass/fail status of each sample. E.g:
-      ![QualiFyr Report](readme_images/qualifyr_report.png)
+    - QualiFyr reports. If a qc_conditions.yml file was supplied reports will be generated that contain a summary of the overall pass/fail status of each sample.
+      - qualifyr_report.html : e.g ![QualiFyr Report](readme_images/qualifyr_report.png)
+      - qualifyr_report.tsv
 
 ## Software used within the workflow
   - [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) A quality control tool for high throughput sequence data.
@@ -88,5 +91,6 @@ These will be found in the directory specified by the `--output_dir` argument
   - [QualiFyr](https://gitlab.com/cgps/qualifyr) Software to give an overall QC status for a sample based on multiple QC metric files
   - [MultiQC](https://multiqc.info/) Aggregate results from bioinformatics analyses across many samples into a single report
   - [KAT](https://github.com/TGAC/KAT) The K-mer Analysis Toolkit (KAT) contains a number of tools that analyse and compare K-mer spectra
+  - [BactInspector](https://gitlab.com/antunderwood/bactinspector) Software using an updated refseq mash database to predict species
 
 
