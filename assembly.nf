@@ -330,7 +330,7 @@ process trimming {
   file('adapter_file.fas') from adapter_file
 
   output:
-  set pair_id, file('trimmed_fastqs/*.fastq.gz') into trimmed_fastqs_for_qc, trimmed_fastqs_for_correction, trimmed_fastqs_for_genome_size_estimation, trimmed_fastqs_for_base_counting, trimmed_fastqs_for_species_id
+  set pair_id, file('trimmed_fastqs/*.f*q.gz') into trimmed_fastqs_for_qc, trimmed_fastqs_for_correction, trimmed_fastqs_for_genome_size_estimation, trimmed_fastqs_for_base_counting, trimmed_fastqs_for_species_id
 
   """
   mkdir trimmed_fastqs
@@ -550,7 +550,7 @@ process merge_reads{
 
 // assemble reads
 process spades_assembly {
-  memory '4 GB'
+  memory { 4.GB * task.attempt }
   
   tag { pair_id }
 
@@ -562,6 +562,9 @@ process spades_assembly {
   set pair_id, file("scaffolds.fasta") into scaffolds
 
   script:
+  
+  spades_memory = 4 * task.attempt
+  
   if (min_read_length.toInteger() < 27 ) { // this is the read length divided by 3 see trimming step
     kmers = '21,33,43,53'
   } else {
@@ -569,7 +572,7 @@ process spades_assembly {
   }
 
   """
-  spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler  -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory 4
+  spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler  -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory ${spades_memory}
 
   """
 
@@ -700,7 +703,11 @@ if (params.qc_conditions) {
     # extract min and max genome sizes from bactinspector output, min file size from
     # file_size_check output and replace place holder in conditions file
     MAX_GENOME_LENGTH=\$(cat ${bactinspector_report} | awk -F'\t' 'NR == 2 {print \$8}')
+    # if no species match set to 0
+    if [ -z \$MAX_GENOME_LENGTH ]; then MAX_GENOME_LENGTH=0; fi
     MIN_GENOME_LENGTH=\$(cat ${bactinspector_report} | awk -F'\t' 'NR == 2 {print \$9}')
+    # if no species match set to 0
+    if [ -z \$MIN_GENOME_LENGTH ]; then MIN_GENOME_LENGTH=0; fi
     MIN_FILE_SIZE=\$(cat ${file_size_check_output} | awk -F'\t' 'NR == 2 {print \$2}')    
 
     sed -i "s/MAX_GENOME_LENGTH/\${MAX_GENOME_LENGTH}/" ${qc_conditions_yml} 
