@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.4.3'
+version = '1.4.4'
 /*
 
 ========================================================================================
@@ -565,10 +565,13 @@ process spades_assembly {
   
   spades_memory = 4 * task.attempt
   
-  if (min_read_length.toInteger() < 27 ) { // this is the read length divided by 3 see trimming step
+  if (min_read_length.toInteger() < 25 ) { // this is the read length divided by 3 see trimming step
     kmers = '21,33,43,53'
-  } else {
+  }
+  else if (min_read_length.toInteger() < 50) {
     kmers = '21,33,43,53,63,75'
+  } else {
+    kmers = '21,33,55,77,99,127'
   }
 
   """
