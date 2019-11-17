@@ -78,6 +78,12 @@ Helper.check_optional_parameters(params, ['input_dir', 'accession_number_file'])
 
 // set up output directory
 output_dir = Helper.check_mandatory_parameter(params, 'output_dir') - ~/\/$/
+// check that the user has specified an output_dir that differs from the default './.default_output' required for --help to work
+if (output_dir =~ /.default_output/) {
+  println "You must specifiy an output directory with --output_dir"
+  System.exit(1)
+}
+
 //  check a pattern has been specified
 if (params.input_dir){
   fastq_pattern = Helper.check_mandatory_parameter(params, 'fastq_pattern')
@@ -466,6 +472,7 @@ def find_average_depth(pair_id, lighter_output){
 // Check for contamination
 process check_for_contamination {
   tag {pair_id}
+  cpus 2
 
   publishDir "${output_dir}/confindr",
     mode: 'copy',
@@ -480,11 +487,11 @@ process check_for_contamination {
   script:
   if (file_pair[0] =~ /_R1/){ // files with _R1 and _R2
     """
-    confindr.py -i . -o . -d ${confindr_db_path} -t 1 -bf 0.025 -b 2 -Xmx 1500m
+    confindr.py -i . -o . -d ${confindr_db_path} -t 2 -bf 0.025 -b 2 --cross_detail -Xmx 1500m
     """
   } else { // files with _1 and _2
     """
-    confindr.py -i . -o . -d ${confindr_db_path} -t 1 -bf 0.025 -b 2 -Xmx 1500m -fid _1 -rid _2
+    confindr.py -i . -o . -d ${confindr_db_path} -t 2 -bf 0.025 -b 2 --cross_detail -Xmx 1500m -fid _1 -rid _2
     """  
   }
 
@@ -589,12 +596,12 @@ process filter_scaffolds {
   set pair_id, file(scaffold_file) from scaffolds
 
   output:
-  set pair_id, file("${pair_id}_scaffolds.fasta") into scaffolds_for_single_analysis, scaffolds_for_qc
-  file("${pair_id}_scaffolds.fasta") into scaffolds_for_combined_analysis
+  set pair_id, file("${pair_id}.fasta") into scaffolds_for_single_analysis, scaffolds_for_qc
+  file("${pair_id}.fasta") into scaffolds_for_combined_analysis
   
   """
   contig-tools filter -l ${minimum_scaffold_length} -c ${minimum_scaffold_depth} -f ${scaffold_file}
-  ln -s scaffolds.filter_gt_${minimum_scaffold_length}bp_gt_${minimum_scaffold_depth}.0cov.fasta ${pair_id}_scaffolds.fasta
+  ln -s scaffolds.filter_gt_${minimum_scaffold_length}bp_gt_${minimum_scaffold_depth}.0cov.fasta ${pair_id}.fasta
   """
 
 }
