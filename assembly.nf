@@ -587,7 +587,7 @@ process spades_assembly {
   else if (min_read_length.toInteger() < 50) {
     kmers = '21,33,43,53,63,75'
   } else {
-    kmers = '21,33,55,77,99,127'
+    kmers = '21,33,43,55,77,99'
   }
 
   if (careful) {
