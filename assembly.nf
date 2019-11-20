@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.4.4'
+version = '1.5.0'
 /*
 
 ========================================================================================
@@ -34,6 +34,7 @@ def helpMessage() {
       --fastq_pattern  The regular expression that will match fastq files e.g '*{R,_}{1,2}*.fastq.gz'
       --accession_number_file Path to a text file containing a list of accession numbers (1 per line)
       --depth_cutoff The estimated depth to downsample each sample to. If not specified no downsampling will occur
+      --no_careful Turn off the default SPAdes careful option which improves assembly by mapping the reads back to the contigs
       --minimum_scaffold_length The minimum length of a scaffold to keep. Others will be filtered out. Default 500
       --minimum_scaffold_depth The minimum depth of coverage a scaffold must have to be kept. Others will be filtered out. Default 3
       --confindr_db_path The path to the confindr database. If not set assumes using Docker image where the path is '/home/bio/software_data/confindr_database'
@@ -66,6 +67,7 @@ params.fastq_pattern = false
 params.accession_number_file = false
 params.adapter_file = false
 params.depth_cutoff = false
+params.no_careful = false
 params.minimum_scaffold_length = false
 params.minimum_scaffold_depth = false
 params.confindr_db_path = false
@@ -93,6 +95,13 @@ if (params.input_dir){
 adapter_file = Helper.check_mandatory_parameter(params, 'adapter_file')
 // assign depth_cutoff from params
 depth_cutoff = params.depth_cutoff
+
+// set careful 
+if (params.no_careful) {
+  careful = false
+} else {
+  careful = true
+}
 // assign minimum scaffold length
 if ( params.minimum_scaffold_length ) {
   minimum_scaffold_length = params.minimum_scaffold_length
@@ -581,10 +590,15 @@ process spades_assembly {
     kmers = '21,33,55,77,99,127'
   }
 
-  """
-  spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler  -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory ${spades_memory}
-
-  """
+  if (careful) {
+    """
+    spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler --careful -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory ${spades_memory}
+    """
+  } else {
+    """
+    spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory ${spades_memory}
+    """
+  }
 
 }
 
@@ -807,7 +821,7 @@ if (params.qc_conditions) {
 
     script:
     """
-    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status,bactinspector.species'
+    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status,bactinspector.species' -s 'Analysis with GHRU Assembly Pipeline version ${version}'
     """
 
   }
