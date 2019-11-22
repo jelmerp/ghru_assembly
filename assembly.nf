@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.4.3'
+version = '1.5.0'
 /*
 
 ========================================================================================
@@ -34,6 +34,7 @@ def helpMessage() {
       --fastq_pattern  The regular expression that will match fastq files e.g '*{R,_}{1,2}*.fastq.gz'
       --accession_number_file Path to a text file containing a list of accession numbers (1 per line)
       --depth_cutoff The estimated depth to downsample each sample to. If not specified no downsampling will occur
+      --careful Turn on the SPAdes careful option which improves assembly by mapping the reads back to the contigs
       --minimum_scaffold_length The minimum length of a scaffold to keep. Others will be filtered out. Default 500
       --minimum_scaffold_depth The minimum depth of coverage a scaffold must have to be kept. Others will be filtered out. Default 3
       --confindr_db_path The path to the confindr database. If not set assumes using Docker image where the path is '/home/bio/software_data/confindr_database'
@@ -66,6 +67,7 @@ params.fastq_pattern = false
 params.accession_number_file = false
 params.adapter_file = false
 params.depth_cutoff = false
+params.careful = false
 params.minimum_scaffold_length = false
 params.minimum_scaffold_depth = false
 params.confindr_db_path = false
@@ -78,6 +80,12 @@ Helper.check_optional_parameters(params, ['input_dir', 'accession_number_file'])
 
 // set up output directory
 output_dir = Helper.check_mandatory_parameter(params, 'output_dir') - ~/\/$/
+// check that the user has specified an output_dir that differs from the default './.default_output' required for --help to work
+if (output_dir =~ /.default_output/) {
+  println "You must specifiy an output directory with --output_dir"
+  System.exit(1)
+}
+
 //  check a pattern has been specified
 if (params.input_dir){
   fastq_pattern = Helper.check_mandatory_parameter(params, 'fastq_pattern')
@@ -87,6 +95,13 @@ if (params.input_dir){
 adapter_file = Helper.check_mandatory_parameter(params, 'adapter_file')
 // assign depth_cutoff from params
 depth_cutoff = params.depth_cutoff
+
+// set careful 
+if (params.careful) {
+  careful = true
+} else {
+  careful = false
+}
 // assign minimum scaffold length
 if ( params.minimum_scaffold_length ) {
   minimum_scaffold_length = params.minimum_scaffold_length
@@ -466,6 +481,7 @@ def find_average_depth(pair_id, lighter_output){
 // Check for contamination
 process check_for_contamination {
   tag {pair_id}
+  cpus 2
 
   publishDir "${output_dir}/confindr",
     mode: 'copy',
@@ -480,11 +496,11 @@ process check_for_contamination {
   script:
   if (file_pair[0] =~ /_R1/){ // files with _R1 and _R2
     """
-    confindr.py -i . -o . -d ${confindr_db_path} -t 1 -bf 0.025 -b 2 -Xmx 1500m
+    confindr.py -i . -o . -d ${confindr_db_path} -t 2 -bf 0.025 -b 2 --cross_detail -Xmx 1500m
     """
   } else { // files with _1 and _2
     """
-    confindr.py -i . -o . -d ${confindr_db_path} -t 1 -bf 0.025 -b 2 -Xmx 1500m -fid _1 -rid _2
+    confindr.py -i . -o . -d ${confindr_db_path} -t 2 -bf 0.025 -b 2 --cross_detail -Xmx 1500m -fid _1 -rid _2
     """  
   }
 
@@ -565,16 +581,24 @@ process spades_assembly {
   
   spades_memory = 4 * task.attempt
   
-  if (min_read_length.toInteger() < 27 ) { // this is the read length divided by 3 see trimming step
+  if (min_read_length.toInteger() < 25 ) { // this is the read length divided by 3 see trimming step
     kmers = '21,33,43,53'
-  } else {
+  }
+  else if (min_read_length.toInteger() < 50) {
     kmers = '21,33,43,53,63,75'
+  } else {
+    kmers = '21,33,43,55,77,99'
   }
 
-  """
-  spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler  -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory ${spades_memory}
-
-  """
+  if (careful) {
+    """
+    spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler --careful -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory ${spades_memory}
+    """
+  } else {
+    """
+    spades.py --pe1-1 ${file_triplet[1]} --pe1-2 ${file_triplet[2]} --pe1-m ${file_triplet[0]} --only-assembler -o . --tmp-dir /tmp/${pair_id}_assembly -k ${kmers} --threads 1 --memory ${spades_memory}
+    """
+  }
 
 }
 
@@ -586,12 +610,12 @@ process filter_scaffolds {
   set pair_id, file(scaffold_file) from scaffolds
 
   output:
-  set pair_id, file("${pair_id}_scaffolds.fasta") into scaffolds_for_single_analysis, scaffolds_for_qc
-  file("${pair_id}_scaffolds.fasta") into scaffolds_for_combined_analysis
+  set pair_id, file("${pair_id}.fasta") into scaffolds_for_single_analysis, scaffolds_for_qc
+  file("${pair_id}.fasta") into scaffolds_for_combined_analysis
   
   """
   contig-tools filter -l ${minimum_scaffold_length} -c ${minimum_scaffold_depth} -f ${scaffold_file}
-  ln -s scaffolds.filter_gt_${minimum_scaffold_length}bp_gt_${minimum_scaffold_depth}.0cov.fasta ${pair_id}_scaffolds.fasta
+  ln -s scaffolds.filter_gt_${minimum_scaffold_length}bp_gt_${minimum_scaffold_depth}.0cov.fasta ${pair_id}.fasta
   """
 
 }
@@ -796,8 +820,9 @@ if (params.qc_conditions) {
     file("qualifyr_report.*")
 
     script:
+    workflow_command = workflow.commandLine.replaceAll('"', '\\\\"')
     """
-    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status,bactinspector.species'
+    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status,bactinspector.species' -s "Analysis with GHRU Assembly Pipeline version ${version}<br><br>Command line:<br>${workflow_command}"
     """
 
   }

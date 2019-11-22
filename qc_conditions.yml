@@ -40,7 +40,7 @@ fastqc:
         condition_type: eq
         condition_value: FAIL
   'Per sequence GC content':
-      failure:
+      warning:
         condition_type: eq
         condition_value: FAIL
   'Per base N content':
@@ -68,6 +68,10 @@ confindr:
     failure:
       condition_type: eq
       condition_value: 'True'
+  'percentage_contamination':
+    failure:
+      condition_type: gt
+      condition_value: 5
 bactinspector:
   'result':
     warning:
