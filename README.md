@@ -26,7 +26,7 @@ The mandatory options that should be supplied are
 
 Optional arguments include
   - `--depth_cutoff` argument. Downsample each sample to an approximate depth of the value supplied e.g 50 means downsample to 50x depth of coverage . If not specified no downsampling will occur
-  - `--no_careful` Turn off the default SPAdes careful option which improves assembly by mapping the reads back to the contigs
+  - `--careful` Turn on the SPAdes careful option which improves assembly by mapping the reads back to the contigs
   - `--minimum_scaffold_length` The minimum length of a scaffold to keep. Others will be filtered out. Default 500 
   - `--minimum_scaffold_depth` The minimum depth of coverage a scaffold must have in order to be kept. Others will be filtered out. Default 3 
   - `--confindr_db_path` The path to the confindr database. If not set assumes use of the Docker image where the path is '/home/bio/software_data/confindr_database'
@@ -46,7 +46,7 @@ The workflow consists of the following steps
 7. Count number of reads and estimate genome size using Mash
 8. Downsample reads if the `--depth_cutoff` argument was specified
 9. Merge reads using Flash where the insert size is small
-10. Assemble reads using SPAdes (by deafult the --careful option is turned on)
+10. Assemble reads using SPAdes (by default the --careful option is turned **off**)
 11. Assess species identification using [bactinspector](https://gitlab.com/antunderwood/bactinspector)
 11. Assess assembly quality using Quast
 12. Sumarise all assembly QCs using Quast

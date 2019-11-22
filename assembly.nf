@@ -34,7 +34,7 @@ def helpMessage() {
       --fastq_pattern  The regular expression that will match fastq files e.g '*{R,_}{1,2}*.fastq.gz'
       --accession_number_file Path to a text file containing a list of accession numbers (1 per line)
       --depth_cutoff The estimated depth to downsample each sample to. If not specified no downsampling will occur
-      --no_careful Turn off the default SPAdes careful option which improves assembly by mapping the reads back to the contigs
+      --careful Turn on the SPAdes careful option which improves assembly by mapping the reads back to the contigs
       --minimum_scaffold_length The minimum length of a scaffold to keep. Others will be filtered out. Default 500
       --minimum_scaffold_depth The minimum depth of coverage a scaffold must have to be kept. Others will be filtered out. Default 3
       --confindr_db_path The path to the confindr database. If not set assumes using Docker image where the path is '/home/bio/software_data/confindr_database'
@@ -67,7 +67,7 @@ params.fastq_pattern = false
 params.accession_number_file = false
 params.adapter_file = false
 params.depth_cutoff = false
-params.no_careful = false
+params.careful = false
 params.minimum_scaffold_length = false
 params.minimum_scaffold_depth = false
 params.confindr_db_path = false
@@ -97,10 +97,10 @@ adapter_file = Helper.check_mandatory_parameter(params, 'adapter_file')
 depth_cutoff = params.depth_cutoff
 
 // set careful 
-if (params.no_careful) {
-  careful = false
-} else {
+if (params.careful) {
   careful = true
+} else {
+  careful = false
 }
 // assign minimum scaffold length
 if ( params.minimum_scaffold_length ) {
@@ -820,8 +820,9 @@ if (params.qc_conditions) {
     file("qualifyr_report.*")
 
     script:
+    workflow_command = workflow.commandLine.replaceAll('"', '\\\\"')
     """
-    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status,bactinspector.species' -s 'Analysis with GHRU Assembly Pipeline version ${version}'
+    qualifyr report -i . -c 'quast.N50,quast.# contigs (>= 1000 bp),quast.Total length (>= 1000 bp),confindr.contam_status,bactinspector.species' -s "Analysis with GHRU Assembly Pipeline version ${version}<br><br>Command line:<br>${workflow_command}"
     """
 
   }
