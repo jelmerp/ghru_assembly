@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.5.0'
+version = '1.5.1'
 /*
 
 ========================================================================================
@@ -41,6 +41,7 @@ def helpMessage() {
       --qc_conditions Path to a YAML file containing pass/warning/fail conditions used by QualiFyr (https://gitlab.com/cgps/qualifyr)
       --prescreen_genome_size_check Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
       --prescreen_file_size_check Minumum size in Mb for the input fastq files. Without this any size of file will be attempted (this and prescreen_genome_size_check are mutually exclusive)
+      --full_output Output pre_trimming fastqc reports, merged_fastqs and corrected_fastqs. These take up signficant disk space
    """.stripIndent()
 }
 
@@ -74,6 +75,7 @@ params.confindr_db_path = false
 params.qc_conditions = false
 params.prescreen_genome_size_check = false
 params.prescreen_file_size_check = false
+params.full_output = false
 
 // check if getting data either locally or from SRA
 Helper.check_optional_parameters(params, ['input_dir', 'accession_number_file'])
@@ -133,6 +135,13 @@ if (params.prescreen_file_size_check){
   prescreen_file_size_check = params.prescreen_file_size_check
 } else {
   prescreen_file_size_check = 15
+}
+
+// set full_output 
+if (params.full_output) {
+  full_output = true
+} else {
+  full_output = false
 }
 
 // set up read_pair channel
@@ -317,9 +326,12 @@ process determine_min_read_length {
 process qc_pre_trimming {
   tag { pair_id }
   
-  publishDir "${output_dir}/fastqc/pre_trimming",
-    mode: 'copy',
-    pattern: "*.html"
+  if (full_output){
+    publishDir "${output_dir}/fastqc/pre_trimming",
+      mode: 'copy',
+      pattern: "*.html"
+
+  }
 
   input:
   set pair_id, file(file_pair) from raw_fastqs_for_qc
@@ -389,7 +401,7 @@ process qc_post_trimming {
 //FastQC MultiQC
 process fastqc_multiqc {
   tag { 'multiqc for fastqc' }
-  memory '4 GB'
+  memory { 4.GB * task.attempt }
 
   publishDir "${output_dir}/quality_reports",
     mode: 'copy',
@@ -451,9 +463,11 @@ trimmed_fastqs_and_genome_size = trimmed_fastqs_for_correction.join(genome_size_
 process read_correction {
   tag { pair_id }
   
-  publishDir "${output_dir}",
-    mode: 'copy',
-    pattern: "corrected_fastqs/*.fastq.gz"
+  if (full_output){
+    publishDir "${output_dir}",
+      mode: 'copy',
+      pattern: "corrected_fastqs/*.fastq.gz"
+  }
 
   input:
   set pair_id, file(file_pair), genome_size from trimmed_fastqs_and_genome_size
@@ -524,7 +538,7 @@ process count_number_of_bases {
 
 def find_total_number_of_bases(pair_id, seqtk_fqchk_ouput){
   m = seqtk_fqchk_ouput =~ /ALL\s+(\d+)\s/
-  total_bases = m[0][1].toInteger() * 2 // the *2 is an estimate since number of reads >q25 in R2 may not be the same
+  total_bases = m[0][1].toLong() * 2 // the *2 is an estimate since number of reads >q25 in R2 may not be the same
   return [pair_id, total_bases]
 }
 base_counts = seqtk_fqchk_output.map { pair_id, file -> find_total_number_of_bases(pair_id, file.text) }
@@ -534,9 +548,11 @@ corrected_fastqs_and_genome_size_and_base_count = corrected_fastqs_for_merging.j
 process merge_reads{
   tag { pair_id }
 
-  publishDir "${output_dir}",
-    mode: 'copy',
-    pattern: "merged_fastqs/*.fastq.gz"
+  if (full_output){
+    publishDir "${output_dir}",
+      mode: 'copy',
+      pattern: "merged_fastqs/*.fastq.gz"
+  }
   
   input:
   set pair_id, file(file_pair), genome_size, base_count from corrected_fastqs_and_genome_size_and_base_count
@@ -647,7 +663,7 @@ process quast {
 // assess assembly with Quast but in a single file
 process quast_summary {
   tag { 'quast summary' }
-  memory '4 GB'
+  memory { 4.GB * task.attempt }
   
   publishDir "${output_dir}/quast",
     mode: 'copy',

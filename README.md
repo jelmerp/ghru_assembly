@@ -33,6 +33,7 @@ Optional arguments include
   - `--qc_conditions` Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr). An example of the format can be seen [here](qc_conditions.yml) and [another](qc_conditions_nextera.yml)  more suitable for reads generated from a Nextera library preparation
   - `--prescreen_genome_size_check` Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
   - `--prescreen_file_size_check` Minumum size in Mb for the input fastq files. Without this any size of file will be attempted (this and prescreen_genome_size_check are mutually exclusive)
+  - `--full_output` Output pre_trimming fastqc reports, merged_fastqs and corrected_fastqs. These take up signficant disk space and so are not copied to the output_dir by default
 
 ## Workflow process
 The workflow consists of the following steps
@@ -60,12 +61,7 @@ A sumary of this process is shown below in the diagram that was generated when r
 These will be found in the directory specified by the `--output_dir` argument
 
   - (Optional) If accession numbers were used as the input source a directory called `fastqs` will contain the fastq file pairs for each accession number
-  -  Directories called `pre_trimming` and `post_trimming` with a `fastqc` parent directory will contain the Fastqc reports for each fastq in html format
-  - A directory called `corrected_fastqs` that contains the fastq files that have been trimmed with Trimmomatic and corrected using Lighter
-  - A directory called `merged_fastqs` that contains the fastq files that have been merged using Flash. There will be a files called
-    - `<SAMPLE NAME>.extendedFrags.fastq.gz` merged reads
-    - `<SAMPLE NAME>.notCombined_1.fastq.gz` unmerged read 1 reads
-    - `<SAMPLE NAME>.notCombined_2.fastq.gz` unmerged read 2 reads
+  - A directory called `fastqc/post_trimming` that contans the Fastqc reports for each fastq in html format after trimming
   - A directory called `assemblies` containing the final assembled scaffold files named as `<SAMPLE NAME>_scaffolds.fasta`. If the qc_conditions argument was given there will be subdirectories named pass, warning and failure where the appropiately QCed scaffolds and failure reasons will be stored.
   - A directory called `quast` containing
     - A summary quast report named `combined_quast_report.tsv`
@@ -77,6 +73,13 @@ These will be found in the directory specified by the `--output_dir` argument
     - QualiFyr reports. If a qc_conditions.yml file was supplied reports will be generated that contain a summary of the overall pass/fail status of each sample.
       - qualifyr_report.html : e.g ![QualiFyr Report](readme_images/qualifyr_report.png)
       - qualifyr_report.tsv
+  - if the `--full_output` parameter is given then the following will also be available in the output directory
+    - A directory called `fastqc/pre_trimming` that contans the Fastqc reports for each fastq in html format prior to trimming
+    - A directory called `corrected_fastqs` that contains the fastq files that have been trimmed with Trimmomatic and corrected using Lighter
+    - A directory called `merged_fastqs` that contains the fastq files that have been merged using Flash. There will be a files called
+      - `<SAMPLE NAME>.extendedFrags.fastq.gz` merged reads
+      - `<SAMPLE NAME>.notCombined_1.fastq.gz` unmerged read 1 reads
+      - `<SAMPLE NAME>.notCombined_2.fastq.gz` unmerged read 2 reads
 
 ## Software used within the workflow
   - [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) A quality control tool for high throughput sequence data.
