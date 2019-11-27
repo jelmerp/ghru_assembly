@@ -389,7 +389,7 @@ process qc_post_trimming {
 //FastQC MultiQC
 process fastqc_multiqc {
   tag { 'multiqc for fastqc' }
-  memory '4 GB'
+  memory { 4.GB * task.attempt }
 
   publishDir "${output_dir}/quality_reports",
     mode: 'copy',
@@ -524,7 +524,7 @@ process count_number_of_bases {
 
 def find_total_number_of_bases(pair_id, seqtk_fqchk_ouput){
   m = seqtk_fqchk_ouput =~ /ALL\s+(\d+)\s/
-  total_bases = m[0][1].toInteger() * 2 // the *2 is an estimate since number of reads >q25 in R2 may not be the same
+  total_bases = m[0][1].toLong() * 2 // the *2 is an estimate since number of reads >q25 in R2 may not be the same
   return [pair_id, total_bases]
 }
 base_counts = seqtk_fqchk_output.map { pair_id, file -> find_total_number_of_bases(pair_id, file.text) }

@@ -53,6 +53,10 @@ confindr:
     failure:
       condition_type: ne
       condition_value: NA
+  'percentage_contamination':
+    failure:
+      condition_type: gt
+      condition_value: 5
 bactinspector:
   'result':
     warning:
