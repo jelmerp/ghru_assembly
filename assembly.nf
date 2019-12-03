@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.5.1'
+version = '1.5.2'
 /*
 
 ========================================================================================
@@ -566,8 +566,8 @@ process merge_reads{
     downsampling_factor = depth_cutoff.toInteger()/(base_count/genome_size)
     """
     mkdir downsampled_fastqs
-    seqtk sample  ${file_pair[0]} ${downsampling_factor} | gzip > downsampled_fastqs/${file_pair[0]}
-    seqtk sample  ${file_pair[1]} ${downsampling_factor} | gzip > downsampled_fastqs/${file_pair[1]}
+    seqtk sample  -s 12345 ${file_pair[0]} ${downsampling_factor} | gzip > downsampled_fastqs/${file_pair[0]}
+    seqtk sample  -s 12345 ${file_pair[1]} ${downsampling_factor} | gzip > downsampled_fastqs/${file_pair[1]}
     flash -m 20 -M 100 -t 1 -d merged_fastqs -o ${pair_id} -z downsampled_fastqs/${file_pair[0]} downsampled_fastqs/${file_pair[1]} 
     """
   } else {
