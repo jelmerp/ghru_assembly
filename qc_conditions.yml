@@ -72,6 +72,9 @@ confindr:
     failure:
       condition_type: gt
       condition_value: 5
+    warning:
+      condition_type: gt
+      condition_value: 0
 bactinspector:
   'result':
     warning:
