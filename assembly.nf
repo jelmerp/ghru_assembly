@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 // Pipeline version
-version = '1.5.3'
+version = '1.5.4'
 /*
 
 ========================================================================================
@@ -538,7 +538,7 @@ process count_number_of_bases {
 
 def find_total_number_of_bases(pair_id, seqtk_fqchk_ouput){
   m = seqtk_fqchk_ouput =~ /ALL\s+(\d+)\s/
-  total_bases = m[0][1].toLong() * 2 // the *2 is an estimate since number of reads >q25 in R2 may not be the same
+  total_bases = new BigDecimal(m[0][1]).toLong() * 2 // the *2 is an estimate since number of reads >q25 in R2 may not be the same
   return [pair_id, total_bases]
 }
 base_counts = seqtk_fqchk_output.map { pair_id, file -> find_total_number_of_bases(pair_id, file.text) }
