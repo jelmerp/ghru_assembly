@@ -810,7 +810,7 @@ if (params.qc_conditions) {
 
     script:
     """
-    sed -i "s/FILE_SIZE/${file_size}/" ${file_size_check_file}
+    sed -i "s/FILE_SIZE/${file_size}/" ${file_size_check_report}
     sed -i "s/MIN_FILE_SIZE/${prescreen_file_size_check}/" ${failed_sample_conditions_yml}
 
     # make json file
