@@ -1,41 +1,70 @@
 # SPAdes Assembly workflow
-This [Nextflow](https://www.nextflow.io/) workflow can be used to process short read fastq files an assembly pipeline using the [SPAdes assembler](http://cab.spbu.ru/software/spades/). Alongside this it will QC the reads before and after trimming and QC the final assembled scaffolds file using [Quast](http://quast.sourceforge.net/quast).
 
-Typically the workflow should be run as follows
+This [Nextflow](https://www.nextflow.io/) workflow can be used to process short read
+FASTQ files an assembly pipeline using the [SPAdes assembler](http://cab.spbu.ru/software/spades/).
+Alongside this, it will QC the reads before and after trimming,
+and QC the final assembled scaffolds file using [Quast](http://quast.sourceforge.net/quast).
+
+Typically the workflow should be run as follows:
 
 ```
-nextflow run assembly.nf [options] -with-docker bioinformant/ghru-assembly:latest -resume 
+nextflow run assembly.nf [options] -resume 
 ```
-To run the test sets either of the following commands will work
- - Using  local fastqs and no down sampling
+
+To run the test sets either of the following commands will work:
+
+ - Using local fastqs and no down sampling
     ```
-    nextflow run assembly.nf --input_dir test_input --output_dir test_output --fastq_pattern "*{R,_}{1,2}*.fastq.gz" --adapter_file adapters.fas --qc_conditions qc_conditions.yml -with-docker bioinformant/ghru-assembly:latest -resume
+    nextflow run assembly.nf --indir test_input --outdir test_output --fastq_pattern "*{R,_}{1,2}*.fastq.gz" --adapter_file adapters.fas --qc_conditions qc_conditions.yml -with-docker bioinformant/ghru-assembly:latest -resume
     ```
+ 
  - Using accession numbers to fetch short reads and downsampling to a depth cutofff of 50
     ```
     
-    nextflow run assembly.nf --accession_number_file accessions.txt --output_dir test_output  --adapter_file adapters.fas --depth_cutoff 50 --qc_conditions qc_conditions.yml -with-docker bioinformant/ghru-assembly:latest -resume
+    nextflow run assembly.nf --accession_number_file accessions.txt --outdir test_output  --adapter_file adapters.fas --depth_cutoff 50 --qc_conditions qc_conditions.yml -with-docker bioinformant/ghru-assembly:latest -resume
     ```
 
-The mandatory options that should be supplied are
-  - A source of the fastq files specified as either of the following
-    - local files on disk using the `--input_dir` and `--fastq_pattern` arguments
-    - from a list of short read archive ERR or SRR accession numbers contained within a file specified by the `--accession_number_file` argument
-  - The output from the pipeline will be written to the directory specified by the `--output_dir` argument
-  - The path to a fasta file containing adapter sequences to trim from reads specified by the `--adapter_sequences` argument
+The mandatory options that should be supplied are:
 
-Optional arguments include
-  - `--depth_cutoff` argument. Downsample each sample to an approximate depth of the value supplied e.g 50 means downsample to 50x depth of coverage . If not specified no downsampling will occur
+  - A source of the FASTQ files specified as either of the following:
+    - Local files on disk using the `--indir` and `--fastq_pattern` arguments
+    - From a list of short read archive ERR or SRR accession numbers
+      contained within a file specified by the `--accession_number_file` argument
+  
+  - The output from the pipeline will be written to the directory specified by the `--outdir` argument
+  
+  - The path to a FASTA file containing adapter sequences to trim from reads specified by the `--adapter_file` argument
+
+Optional arguments include:
+
+  - `--depth_cutoff <INT>` Downsample each sample to an approximate depth of the value supplied,
+        e.g `50` means downsample to 50x depth of coverage.
+        If not specified, no downsampling will occur.
+  
   - `--careful` Turn on the SPAdes careful option which improves assembly by mapping the reads back to the contigs
-  - `--minimum_scaffold_length` The minimum length of a scaffold to keep. Others will be filtered out. Default 500 
-  - `--minimum_scaffold_depth` The minimum depth of coverage a scaffold must have in order to be kept. Others will be filtered out. Default 3 
-  - `--confindr_db_path` The path to the confindr database. If not set assumes use of the Docker image where the path is '/home/bio/software_data/confindr_database'
-  - `--qc_conditions` Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr). An example of the format can be seen [here](qc_conditions.yml) and [another](qc_conditions_nextera.yml)  more suitable for reads generated from a Nextera library preparation
-  - `--prescreen_genome_size_check` Size in bp of the maximum estimated genome to assemble. Without this any size genome assembly will be attempted
-  - `--prescreen_file_size_check` Minumum size in Mb for the input fastq files. Without this any size of file will be attempted (this and prescreen_genome_size_check are mutually exclusive)
-  - `--full_output` Output pre_trimming fastqc reports, merged_fastqs and corrected_fastqs. These take up signficant disk space and so are not copied to the output_dir by default
+  
+  - `--minimum_scaffold_length <INT>` The minimum length of a scaffold to keep in base pairs. Others will be filtered out. Default `500` 
+  
+  - `--minimum_scaffold_depth <INT>` The minimum depth of coverage a scaffold must have in order to be kept. Others will be filtered out. Default `3` 
+  
+  - `--confindr_db_path <DIR>` The path to the confindr database.
+    If not set assumes use of the Docker image where the path is '/home/bio/software_data/confindr_database'.
+  
+  - `--qc_conditions <FILE>` Path to a YAML file containing pass/warning/fail conditions used by [QualiFyr](https://gitlab.com/cgps/qualifyr).
+    An example of the format can be seen [here](qc_conditions.yml) and [another](qc_conditions_nextera.yml)
+    more suitable for reads generated from a Nextera library preparation
+  
+  - `--prescreen_genome_size_check <INT>` Size in bp of the maximum estimated genome to assemble.
+    Without this any size genome assembly will be attempted.
+  
+  - `--prescreen_file_size_check <INT>` Minumum size in Mb for the input fastq files.
+    Without this any size of file will be attempted (this and prescreen_genome_size_check are mutually exclusive)
+  
+  - `--full_output` Output pre_trimming FastQC reports, merged_fastqs and corrected_fastqs.
+    These take up signficant disk space and so are not copied to the outdir by default.
 
 ## Workflow process
+
 The workflow consists of the following steps
 
 1. (Optional) Fetch reads from the ENA
@@ -50,7 +79,7 @@ The workflow consists of the following steps
 10. Assemble reads using SPAdes (by default the --careful option is turned **off**)
 11. Assess species identification using [bactinspector](https://gitlab.com/antunderwood/bactinspector)
 11. Assess assembly quality using Quast
-12. Sumarise all assembly QCs using Quast
+12. Summarize all assembly QCs using Quast
 13. (Optional if [QuailFyr](https://gitlab.com/cgps/qualifyr) qc conditions YAML file is supplied). Filter assemblies into three directories: pass, warning and failure based on QC  metrics
 
 A sumary of this process is shown below in the diagram that was generated when running Nextflow using the -with-dag command
@@ -58,7 +87,7 @@ A sumary of this process is shown below in the diagram that was generated when r
 ![workflow diagram](readme_images/dag.png)
 
 ## Workflow outputs
-These will be found in the directory specified by the `--output_dir` argument
+These will be found in the directory specified by the `--outdir` argument
 
   - (Optional) If accession numbers were used as the input source a directory called `fastqs` will contain the fastq file pairs for each accession number
   - A directory called `fastqc/post_trimming` that contans the Fastqc reports for each fastq in html format after trimming
@@ -82,6 +111,7 @@ These will be found in the directory specified by the `--output_dir` argument
       - `<SAMPLE NAME>.notCombined_2.fastq.gz` unmerged read 2 reads
 
 ## Software used within the workflow
+
   - [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) A quality control tool for high throughput sequence data.
   - [Trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic) A flexible read trimming tool for Illumina NGS data.
   - [mash](https://mash.readthedocs.io/en/latest/) Fast genome and metagenome distance estimation using MinHash.
@@ -96,5 +126,3 @@ These will be found in the directory specified by the `--output_dir` argument
   - [MultiQC](https://multiqc.info/) Aggregate results from bioinformatics analyses across many samples into a single report
   - [KAT](https://github.com/TGAC/KAT) The K-mer Analysis Toolkit (KAT) contains a number of tools that analyse and compare K-mer spectra
   - [BactInspector](https://gitlab.com/antunderwood/bactinspector) Software using an updated refseq mash database to predict species
-
-
